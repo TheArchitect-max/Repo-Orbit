@@ -4,6 +4,7 @@ No personal repositories, user data, or external downloads are involved.
 """
 from __future__ import annotations
 import subprocess
+import os
 import sys
 import tempfile
 from pathlib import Path
@@ -14,16 +15,30 @@ from repoorbit.core import analyze
 from repoorbit.render import render
 
 
+_COMMIT_INDEX = 0
+
+
 def git(repo: Path, *args: str) -> None:
-    subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+    global _COMMIT_INDEX
+    env = os.environ.copy()
+    if args and args[0] == 'commit':
+        epoch = str(1700000000 + _COMMIT_INDEX)
+        env.update(GIT_AUTHOR_DATE=epoch + ' +0000',
+                   GIT_COMMITTER_DATE=epoch + ' +0000')
+        _COMMIT_INDEX += 1
+    subprocess.run(["git", "-C", str(repo), *args], check=True,
+                   capture_output=True, env=env)
 
 
 def build(target: Path) -> None:
+    global _COMMIT_INDEX
+    _COMMIT_INDEX = 0  # Every invocation must reproduce the same 32 Git commits.
     with tempfile.TemporaryDirectory(prefix="orbit-demo-") as temporary:
         repo=Path(temporary)/"Polaris-Engine";repo.mkdir()
         git(repo,"init","-q")
         git(repo,"config","user.email","demo@example.invalid")
         git(repo,"config","user.name","Demo Contributor")
+        git(repo,"config","core.autocrlf","false")
         scenes=[
             ("First light: a new idea",{"README.md":"# Polaris Engine\n", ".gitignore":"__pycache__/\n"},[]),
             ("Lay the foundations",{"src/core.py":"def orbit(): return 1\n","src/settings.py":"MODE = 'demo'\n"},[]),
@@ -71,7 +86,7 @@ def build(target: Path) -> None:
             scenes.append((f'{scene_title} · iteration {step+1}',created,[]))
         for index,(message,changes,deletions) in enumerate(scenes):
             for name,body in changes.items():
-                file=repo/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_text(body)
+                file=repo/name;file.parent.mkdir(parents=True,exist_ok=True);file.write_text(body,encoding="utf-8",newline="\n")
             for name in deletions:(repo/name).unlink()
             git(repo,"add","-A")
             git(repo,"commit","-q","-m",message)
@@ -79,7 +94,7 @@ def build(target: Path) -> None:
         if data["history_window"] != len(scenes) or data["files_final"] < 200:
             raise AssertionError(f"Unexpected demo data: {data['history_window']}, {data['files_final']}")
         target.parent.mkdir(parents=True,exist_ok=True)
-        target.write_text(render(data),encoding="utf-8")
+        target.write_text(render(data),encoding="utf-8",newline="\n")
         print(f"Generated {target} ({target.stat().st_size:,} bytes) from {len(scenes)} real Git commits")
 
 if __name__ == '__main__':

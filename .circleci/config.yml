@@ -15,6 +15,15 @@ parameters:
   run_macos:
     type: boolean
     default: false
+  run_browser_linux:
+    type: boolean
+    default: false
+  run_browser_windows:
+    type: boolean
+    default: false
+  run_browser_macos:
+    type: boolean
+    default: false
 
 jobs:
   native-linux:
@@ -101,6 +110,122 @@ jobs:
           path: external-results/circleci-macos
           destination: repo-orbit-macos
 
+  browser-linux:
+    docker:
+      - image: cimg/python:3.13
+    resource_class: medium
+    steps:
+      - run:
+          name: Public HTTPS source checkout pinned to CircleCI SHA
+          command: |
+            set -euo pipefail
+            test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
+            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
+            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
+            test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
+      - run:
+          name: Install pinned test-only Playwright and Chromium
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            mkdir -p external-results
+            python -m venv .browser-venv
+            .browser-venv/bin/python -m pip install -r requirements-browser-ci.txt 2>&1 | tee -a external-results/browser-linux-install.log
+            .browser-venv/bin/python -m playwright install --with-deps chromium 2>&1 | tee -a external-results/browser-linux-install.log
+      - run:
+          name: Build deterministic Git fixtures and run native Chromium E2E
+          no_output_timeout: 45m
+          command: |
+            set -euo pipefail
+            .browser-venv/bin/python -u scripts/run_browser_evidence.py --platform Linux --out external-results/browser-linux --run
+      - run:
+          name: Finalize complete browser evidence ZIP even on earlier FAIL
+          when: always
+          command: |
+            python -u scripts/run_browser_evidence.py --platform Linux --out external-results/browser-linux --package-only
+      - store_artifacts:
+          path: external-results/browser-linux
+          destination: repo-orbit-r8-browser-linux
+
+  browser-windows:
+    executor: win/default
+    steps:
+      - run:
+          name: Public HTTPS source checkout pinned to CircleCI SHA
+          command: |
+            $ErrorActionPreference = 'Stop'
+            if ([string]::IsNullOrWhiteSpace($env:CIRCLE_SHA1)) { throw 'HOLD: missing CIRCLE_SHA1' }
+            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
+            if ($LASTEXITCODE -ne 0) { throw 'HOLD: HTTPS clone failed' }
+            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach $env:CIRCLE_SHA1
+            if ($LASTEXITCODE -ne 0) { throw 'HOLD: checkout failed' }
+            if ((git rev-parse HEAD).Trim() -ne $env:CIRCLE_SHA1) { throw 'HOLD: checkout SHA mismatch' }
+      - run:
+          name: Install pinned test-only Playwright and Chromium
+          no_output_timeout: 20m
+          command: |
+            $ErrorActionPreference = 'Stop'
+            New-Item -ItemType Directory -Path external-results -Force | Out-Null
+            python -m venv .browser-venv
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & .\.browser-venv\Scripts\python.exe -m pip install -r requirements-browser-ci.txt 2>&1 | Tee-Object -FilePath external-results/browser-windows-install.log -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            & .\.browser-venv\Scripts\python.exe -m playwright install chromium 2>&1 | Tee-Object -FilePath external-results/browser-windows-install.log -Append
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run:
+          name: Build deterministic Git fixtures and run native Chromium E2E
+          no_output_timeout: 45m
+          command: |
+            $ErrorActionPreference = 'Stop'
+            & .\.browser-venv\Scripts\python.exe -u scripts/run_browser_evidence.py --platform Windows --out external-results/browser-windows --run
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run:
+          name: Finalize complete browser evidence ZIP even on earlier FAIL
+          when: always
+          command: |
+            python -u scripts/run_browser_evidence.py --platform Windows --out external-results/browser-windows --package-only
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - store_artifacts:
+          path: external-results/browser-windows
+          destination: repo-orbit-r8-browser-windows
+
+  browser-macos:
+    macos:
+      xcode: "16.4.0"
+    resource_class: m4pro.medium
+    steps:
+      - run:
+          name: Public HTTPS source checkout pinned to CircleCI SHA
+          command: |
+            set -euo pipefail
+            test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
+            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
+            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
+            test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
+      - run:
+          name: Install pinned test-only Playwright and Chromium
+          no_output_timeout: 20m
+          command: |
+            set -euo pipefail
+            mkdir -p external-results
+            python3 -m venv .browser-venv
+            .browser-venv/bin/python -m pip install -r requirements-browser-ci.txt 2>&1 | tee -a external-results/browser-macos-install.log
+            .browser-venv/bin/python -m playwright install chromium 2>&1 | tee -a external-results/browser-macos-install.log
+      - run:
+          name: Build deterministic Git fixtures and run native Chromium E2E
+          no_output_timeout: 45m
+          command: |
+            set -euo pipefail
+            .browser-venv/bin/python -u scripts/run_browser_evidence.py --platform Darwin --out external-results/browser-macos --run
+      - run:
+          name: Finalize complete browser evidence ZIP even on earlier FAIL
+          when: always
+          command: |
+            python3 -u scripts/run_browser_evidence.py --platform Darwin --out external-results/browser-macos --package-only
+      - store_artifacts:
+          path: external-results/browser-macos
+          destination: repo-orbit-r8-browser-macos
+
 workflows:
   linux-opt-in:
     when: << pipeline.parameters.run_linux >>
@@ -114,3 +239,15 @@ workflows:
     when: << pipeline.parameters.run_macos >>
     jobs:
       - native-macos
+  browser-linux-opt-in:
+    when: << pipeline.parameters.run_browser_linux >>
+    jobs:
+      - browser-linux
+  browser-windows-opt-in:
+    when: << pipeline.parameters.run_browser_windows >>
+    jobs:
+      - browser-windows
+  browser-macos-opt-in:
+    when: << pipeline.parameters.run_browser_macos >>
+    jobs:
+      - browser-macos

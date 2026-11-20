@@ -72,7 +72,7 @@ class CircleCIValidationTests(unittest.TestCase):
         data = (ROOT/'.circleci'/'config.yml').read_text()
         for field in ['run_linux:', 'run_windows:', 'run_macos:']:
             self.assertIn(field,data)
-        self.assertEqual(data.count('default: false'),3)
+        self.assertEqual(data.count('default: false'),6)  # 3 native CLI + 3 browser jobs
         for s in ['cimg/python:3.13', 'executor: win/default', 'm4pro.medium',
                   'store_artifacts:', '--out external-results/circleci-']:
             self.assertIn(s,data)
@@ -82,10 +82,10 @@ class CircleCIValidationTests(unittest.TestCase):
         config = (ROOT / '.circleci' / 'config.yml').read_text()
         self.assertNotIn('      - checkout', config)
         url = 'https://github.com/TheArchitect-max/Repo-Orbit.git'
-        self.assertEqual(config.count('git clone --quiet --no-checkout ' + url), 3)
-        self.assertEqual(config.count('git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach'), 3)
-        self.assertEqual(config.count('HOLD: missing CIRCLE_SHA1'), 3)
-        self.assertEqual(config.count('HOLD: checkout SHA mismatch'), 3)
+        self.assertEqual(config.count('git clone --quiet --no-checkout ' + url), 6)
+        self.assertEqual(config.count('git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach'), 6)
+        self.assertEqual(config.count('HOLD: missing CIRCLE_SHA1'), 6)
+        self.assertEqual(config.count('HOLD: checkout SHA mismatch'), 6)
         self.assertNotIn('git@github.com:', config)
 
     def test_native_checkout_preserves_exact_lf_source_bytes(self):

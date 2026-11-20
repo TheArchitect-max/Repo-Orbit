@@ -19,7 +19,10 @@ import hashlib
 import json
 import os
 import platform
-import resource
+try:
+    import resource
+except ImportError:
+    resource = None  # Native Windows has no POSIX resource module.
 import subprocess
 import sys
 import time
@@ -120,7 +123,7 @@ def analyze_fixture(root: Path, output: Path, html_path: Path) -> dict:
     elapsed_render=time.perf_counter()
     html=render(data,compression='gzip')
     render_s=time.perf_counter()-elapsed_render
-    html_path.write_text(html,encoding='utf-8')
+    html_path.write_text(html,encoding='utf-8',newline='\n')
     html_bytes=html_path.stat().st_size
     if html_bytes > 32*1024*1024:
         raise AssertionError('Default 32 MiB HTML cap exceeded')
@@ -136,7 +139,7 @@ def analyze_fixture(root: Path, output: Path, html_path: Path) -> dict:
             'HTML_bytes':html_bytes,'HTML_SHA256':hashlib.sha256(html_path.read_bytes()).hexdigest(),
             'JSON_uncompressed_estimated_bytes':len(json.dumps(data,ensure_ascii=False,separators=(',',':')).encode())},
         'timing_seconds':{'analysis':round(elapsed,3),'render':round(render_s,3)},
-        'process_peak_RSS_KiB':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        'process_peak_RSS_KiB':resource.getrusage(resource.RUSAGE_SELF).ru_maxrss if resource else None,
         'environment':{'platform':platform.platform(),'python':platform.python_version(),
                        'git':git(root,'--version').decode().strip()},
         'security_notes':['Synthetic repository only; no user files or networking',

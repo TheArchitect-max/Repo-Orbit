@@ -31,13 +31,13 @@ The generated HTML runs locally without a REPO ORBIT backend. The `--redact` opt
 
 | Gate | Evidence / status |
 | --- | --- |
-| Python regressions | **106/106 PASS**, local Linux, R7 ZIP-tool candidate; final native R7 rerun pending |
+| Python regressions | **R7 native:** 106/106 Linux, 106/106 macOS, Windows 104 PASS + 2 POSIX skips; **R8 local candidate:** 112/112 tests PASS |
 | Independent Git core/render hashes | **PASS** against pinned v0.7.0 and v0.8.0 hashes |
 | External Linux CLI benchmarks | **PASS** on pinned Requests, Flask and uv; 9/9 scenarios |
-| Native Windows CLI | **SUCCESS** in earlier CircleCI job; R7 same-commit ZIP and numerical audit **HOLD** |
-| Native macOS CLI | **SUCCESS** in earlier CircleCI job; R7 same-commit ZIP and numerical audit **HOLD** |
+| Native Windows CLI | **R7 native CLI accepted** within predeclared scope; R8 browser E2E **HOLD** |
+| Native macOS CLI | **R7 native CLI accepted** within predeclared scope; R8 browser E2E **HOLD** |
 | Windows/macOS browser acceptance | **HOLD** — separate gate |
-| MIT license and public release | **HOLD** — owner approval and remaining release checks |
+| MIT license and public release | **MIT direction selected**; active license/release **HOLD** pending acceptance |
 
 The source-only repository intentionally excludes generated wheels, large demo media, older historical logs and the already collected raw evidence package. The full reproducible scripts, pinned production and reference engines, Python tests, documentation and validation configuration are included here. No pass is inferred from an unexecuted CircleCI job.
 
@@ -52,8 +52,9 @@ Source Branch to `build/circleci-native-r4`, with `run_linux=true`,
 `run_windows=true` and `run_macos=true`. The three OS-specific jobs
 publish one complete downloadable evidence ZIP plus SHA-256 per platform.
 Use `scripts/audit_ci_zips.py` to verify all three ZIPs against the
-predeclared nine-cell CLI performance matrix. The separate browser E2E gate
-and public release/merge acceptance remain on HOLD.
+predeclared nine-cell CLI performance matrix. The R7 same-commit matrix has
+been independently accepted. The separate R8 native Chromium E2E gate,
+accessibility/security reviews and release/merge acceptance remain on HOLD.
 
 Each native job checks source integrity, runs the regression suite, retrieves the three pinned complete Git histories, and performs 21 paired measurements for each requested commit window. Inspect CircleCI results and save the job artifacts before granting acceptance. **CircleCI is for validation only, never for SaaS runtime.**
 
@@ -62,3 +63,18 @@ Each native job checks source integrity, runs the regression suite, retrieves th
 REPO ORBIT is a Git visualization utility, not a source-code security scanner, semantic dependency analyzer, or AI code-review service. It does not host a live application, run a database, manage user sessions or process payments.
 
 Details: [Engineering](docs/ENGINEERING.md) · [Acceptance](docs/ACCEPTANCE.md) · [Roadmap](docs/ROADMAP.md) · [Security](SECURITY.md) · [Third-party notices](THIRD_PARTY_NOTICES.md).
+## R8 native Chromium acceptance (in development)
+
+Browser E2E adds **zero production dependencies**. Playwright 1.65.2 and its
+Chromium browser are installed for CI only. Deterministic synthetic Git
+fixtures are generated on each native host, then offline UI interactions,
+search, exact A/B, export, XSS safeguards and the combined maximum dataset are
+validated. The three `run_browser_*` CircleCI parameters default to `false`.
+Each job publishes one independent SHA-256-audited browser evidence ZIP,
+including a real screenshot and fixture provenance, even if tests fail.
+Use `scripts/audit_browser_zips.py` on the three downloaded ZIPs.
+
+**Publication decision:** REPO ORBIT is to become a free, MIT-licensed,
+standalone THE ARCHITECT engineering reference project after acceptance.
+The source is already publicly visible, but no MIT license grant or release
+has yet been published. Other repositories remain separate IP assets.

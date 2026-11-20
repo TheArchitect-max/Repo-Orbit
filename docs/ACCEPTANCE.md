@@ -1,3 +1,24 @@
+# Current R7/R8 acceptance status (2026-11-20)
+
+R7 native CLI: **PASS_WITHIN_PREDECLARED_SCOPE**, independently audited
+on one CircleCI commit across Linux, Windows and macOS, with complete evidence
+ZIPs. Windows: 104 PASS and 2 POSIX-specific SKIP; other OSes: 106 PASS.
+25 of 27 median benchmark scenarios are faster; two Windows Requests windows
+are ~0.10% and ~0.01% slower, both within the predeclared 5% threshold.
+This is not a universal performance claim.
+
+R8 native Chromium E2E: **HOLD** until independent same-SHA CircleCI evidence
+from all three platforms passes `scripts/audit_browser_zips.py`. The local
+Chromium smoke, V7 search/escaping and 8,000/80,000/900,000 maximum-viewer
+checks are locally exercised, but Linux-only local checks cannot satisfy
+the native OS matrix. Browser-specific Playwright/Chromium is test-only.
+
+Open-source direction: MIT engineering showcase selected; active license,
+release, accessibility/security and publication checks not yet accepted.
+PR #1 MUST remain draft and no merge is allowed until the required gates PASS.
+
+---
+
 # REPO ORBIT v0.8.0 — local candidate acceptance
 
 **Decision:** LOCAL PASS on the exact enumerated controls. PUBLIC RELEASE HOLD (MIT approval, Windows/macOS and independent security/usability reviews not performed).
