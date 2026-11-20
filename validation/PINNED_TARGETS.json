@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "created_utc_date": "2026-11-20",
+  "description": "Pinned public source revisions for REPO ORBIT R4; no target repository code is executed.",
+  "repositories": {
+    "requests": {
+      "slug": "psf/requests",
+      "url": "https://github.com/psf/requests.git",
+      "sha": "3c7baaa05ab4aa49cc819ce3a819d260de19c157",
+      "default_branch": "main"
+    },
+    "flask": {
+      "slug": "pallets/flask",
+      "url": "https://github.com/pallets/flask.git",
+      "sha": "49943b5a94413a530761350f04e896f76e8d620e",
+      "default_branch": "main"
+    },
+    "uv": {
+      "slug": "astral-sh/uv",
+      "url": "https://github.com/astral-sh/uv.git",
+      "sha": "7bf2d9a3ae44f53a19eed9dcc2348492c8f9f2be",
+      "default_branch": "main"
+    },
+    "novnc": {
+      "slug": "novnc/noVNC",
+      "url": "https://github.com/novnc/noVNC.git",
+      "sha": "7fcf9dcfe0cc5b14e3841a4429dc091a6ffca861",
+      "default_branch": "master"
+    }
+  },
+  "required_platforms": [
+    "Linux",
+    "Windows",
+    "Darwin"
+  ],
+  "required_repositories": [
+    "requests",
+    "flask",
+    "uv"
+  ],
+  "required_windows": [
+    60,
+    300,
+    1000
+  ],
+  "min_runs": 21,
+  "maximum_regression_ratio": 1.05,
+  "source_sha256": {
+    "v0.7.0": {
+      "core": "4f27d2a35f5d6b05f2696d660db388d659b01b9b0e57398758c1f0604aa92278",
+      "render": "5fb14b58e09bb129a44273f936a3d5b01305472adf7a561b8fdda424287926d5"
+    },
+    "v0.8.0": {
+      "core": "92b6b62063c2d4a202fb6b669faa3df6f6e7a04a09f5f63807cce2a17cd8c1b8",
+      "render": "cb7682208162f425b7cd70134f76a88cd65215a3ff467e1ecc69ac75d32696e1"
+    }
+  }
+}
