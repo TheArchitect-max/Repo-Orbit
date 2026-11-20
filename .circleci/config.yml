@@ -1,0 +1,100 @@
+version: 2.1
+
+# REPO ORBIT — validation only. All jobs opt-in.
+# In CircleCI Project Settings -> Triggers, disable all automatic triggers.
+orbs:
+  win: circleci/windows@5.0
+
+parameters:
+  run_linux:
+    type: boolean
+    default: false
+  run_windows:
+    type: boolean
+    default: false
+  run_macos:
+    type: boolean
+    default: false
+
+jobs:
+  native-linux:
+    docker:
+      - image: cimg/python:3.13
+    resource_class: medium
+    steps:
+      - checkout
+      - run:
+          name: Verify Python, Git, and original source integrity
+          command: |
+            python --version
+            python -c "import sys; assert sys.version_info >= (3, 10), sys.version"
+            git --version
+            python -m unittest discover -s tests -p 'test_*.py'
+      - run:
+          name: Pinned full-history Requests, Flask and uv performance benchmarks
+          no_output_timeout: 45m
+          command: |
+            python -u scripts/run_circleci_native.py --out external-results/circleci-linux
+      - store_artifacts:
+          path: external-results/circleci-linux
+          destination: repo-orbit-linux
+
+  native-windows:
+    executor: win/default
+    steps:
+      - checkout
+      - run:
+          name: Verify native Windows, Python, Git and source integrity
+          command: |
+            $ErrorActionPreference = 'Stop'
+            python --version
+            python -c "import sys; assert sys.version_info >= (3, 10), sys.version"
+            git --version
+            python -m unittest discover -s tests -p 'test_*.py'
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run:
+          name: Pinned full-history Requests, Flask and uv performance benchmarks
+          no_output_timeout: 45m
+          command: |
+            $ErrorActionPreference = 'Stop'
+            python -u scripts/run_circleci_native.py --out external-results/circleci-windows
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - store_artifacts:
+          path: external-results/circleci-windows
+          destination: repo-orbit-windows
+
+  native-macos:
+    macos:
+      xcode: "16.4.0"
+    resource_class: m4pro.medium
+    steps:
+      - checkout
+      - run:
+          name: Verify native macOS, Python, Git and source integrity
+          command: |
+            python3 --version
+            python3 -c "import sys; assert sys.version_info >= (3, 10), sys.version"
+            git --version
+            python3 -m unittest discover -s tests -p 'test_*.py'
+      - run:
+          name: Pinned full-history Requests, Flask and uv performance benchmarks
+          no_output_timeout: 45m
+          command: |
+            python3 -u scripts/run_circleci_native.py --out external-results/circleci-macos
+      - store_artifacts:
+          path: external-results/circleci-macos
+          destination: repo-orbit-macos
+
+workflows:
+  linux-opt-in:
+    when: << pipeline.parameters.run_linux >>
+    jobs:
+      - native-linux
+  windows-opt-in:
+    when: << pipeline.parameters.run_windows >>
+    jobs:
+      - native-windows
+  macos-opt-in:
+    when: << pipeline.parameters.run_macos >>
+    jobs:
+      - native-macos
