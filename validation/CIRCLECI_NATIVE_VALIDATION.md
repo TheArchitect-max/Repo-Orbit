@@ -97,6 +97,31 @@ preflight, before launching the unit suite. This is required to prevent
 benchmark work on any integrity-failed checkout. A dedicated regression test
 checks this sequencing. Local Linux suite on the full patch: **100/100 PASS**.
 
+## Native Windows R5 second attempt — raw-object fixture correction (2026-11-20)
+
+On the second native Windows attempt at HEAD `9e6b47f335c27cdaa34b18e051275f2858bf7b34`,
+Python 3.14.9 and Git 2.56.0.windows.3 were confirmed. The pinned source
+integrity preflight **PASSED** (11 regression modules). The unittest gate
+ended with **100 tests, 6 FAIL, 3 ERROR, 3 SKIP**. No Windows benchmark ran.
+Primary evidence: `build_9_step_102_container_0.txt`.
+
+Two independent defects were identified:
+1. Git for Windows checks filenames even in fast-import and rejects
+   newline/control characters, `<` and `:`. The test-only
+   `tests/portable_git.py` now writes real Git blob and recursive raw tree
+   objects without materializing invalid host filenames or bypassing
+   the production analyzer. A new test verifies that the parent commit,
+   valid tracked file and nested adversarial paths remain intact.
+2. Some unit tests read UTF-8 HTML/JSON using the platform-default
+   cp1252 on Windows. All affected test readers now explicitly decode
+   using UTF-8, as required by the artifact format.
+
+Verification on Linux: **101/101 tests PASS**. With
+`PYTHONUTF8=0 LC_ALL=C LANG=C`: **101/101 PASS**.
+The four original v0.7/v0.8 core/render source SHA-256 values are unchanged.
+These are local checks, **not** a native Windows PASS. Keep Windows
+benchmarking and PR merge on HOLD until CircleCI supplies fresh evidence.
+
 ## Cost-controlled manual execution
 1. Connect this GitHub repository to CircleCI via GitHub App.
 2. In CircleCI Project Settings > Triggers, disable all automatic push/PR triggers.

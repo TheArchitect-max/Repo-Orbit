@@ -137,15 +137,15 @@ class V2Tests(Repository):
         process=subprocess.run([sys.executable,'-m','repoorbit',str(self.repo),
              '--redact','--verify','full','--json',str(data),'-o',str(html)],capture_output=True,text=True)
         self.assertEqual(process.returncode,0,process.stderr)
-        self.assertNotIn('secret message',html.read_text())
-        self.assertNotIn('root/alpha.py',data.read_text())
-        self.assertEqual(json.loads(data.read_text())['verified_frames'],1)
+        self.assertNotIn('secret message',html.read_text(encoding='utf-8'))
+        self.assertNotIn('root/alpha.py',data.read_text(encoding='utf-8'))
+        self.assertEqual(json.loads(data.read_text(encoding='utf-8'))['verified_frames'],1)
 
     def test_atomic_write_retains_old_file_if_replace_fails(self):
         dest=Path(self.tmp.name)/'atomic.txt';dest.write_text('original')
         with patch('repoorbit.__main__.os.replace',side_effect=OSError('injected')):
             with self.assertRaises(OSError):_atomic_write(dest,'new')
-        self.assertEqual(dest.read_text(),'original')
+        self.assertEqual(dest.read_text(encoding='utf-8'),'original')
         self.assertEqual(list(dest.parent.glob('.atomic.txt.*.tmp')),[])
 
     def test_deterministic_export_across_reruns(self):

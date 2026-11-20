@@ -129,7 +129,7 @@ class CoreTests(RepoFixture):
         self.assertEqual(run.returncode,0,run.stderr)
         self.assertIn('Repo Orbit',run.stdout)
         self.assertTrue(output.is_file())
-        self.assertIn('repoorbit-v3',output.read_text())
+        self.assertIn('repoorbit-v3',output.read_text(encoding='utf-8'))
 
 
 if __name__=='__main__':unittest.main()

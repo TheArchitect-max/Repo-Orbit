@@ -119,8 +119,8 @@ class V5Tests(unittest.TestCase):
             result=subprocess.run(['python','-m','repoorbit',str(self.repo),'-o',str(html),
                                    '--html-format','gzip','--json',str(jsonpath)],capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
-            self.assertIn('data-encoding="gzip-base64"',html.read_text())
-            payload=json.loads(jsonpath.read_text())
+            self.assertIn('data-encoding="gzip-base64"',html.read_text(encoding='utf-8'))
+            payload=json.loads(jsonpath.read_text(encoding='utf-8'))
             self.assertNotIn('packed',payload)
             self.assertEqual(payload['commits'][-1]['changes'][0][1],'README.md')
 

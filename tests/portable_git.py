@@ -1,9 +1,9 @@
-"""Create Git history fixtures without materializing forbidden host filenames.
+"""Create adversarial Git trees without Windows-incompatible working tree paths.
 
-The Git tree supports arbitrary NUL-free path bytes, whereas Windows cannot
-create names containing '<', newlines or control characters. This helper
-builds objects only, through Git fast-import; it does not write these paths
-into the host filesystem. It is test infrastructure, not benchmark evidence.
+Git for Windows validates names even when fast-import creates tree objects,
+so a fast-import fixture is not portable. This test-only helper writes Git blobs
+and raw tree objects, then commits the resulting root tree. No unsafe path is
+materialized in the host filesystem, and no source Git repository is modified.
 """
 from __future__ import annotations
 
@@ -12,63 +12,104 @@ from pathlib import Path
 
 
 def _git(repo: Path, *args: str, input_bytes: bytes | None = None) -> bytes:
-    process = subprocess.run(
+    proc = subprocess.run(
         ['git', '-C', str(repo), *args], input=input_bytes,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
     )
-    if process.returncode:
+    if proc.returncode:
         raise AssertionError(
-            f'Git fixture failed ({args}): {process.stderr.decode("utf-8", "replace")}')
-    return process.stdout.strip()
+            f'Git fixture failed ({args}): {proc.stderr.decode("utf-8", "replace")}')
+    return proc.stdout
 
 
-def _quote_git_path(name: str) -> bytes:
-    """C-quote UTF-8 bytes as documented by git-fast-import's M command."""
-    raw = name.encode('utf-8')
-    if not raw or b'\x00' in raw:
-        raise ValueError('Git fixture path must be non-empty and NUL-free')
-    out = bytearray(b'"')
-    for char in raw:
-        if char == 34:
-            out.extend(b'\\"')
-        elif char == 92:
-            out.extend(b'\\\\')
-        elif char < 32 or char >= 127:
-            out.extend(f'\\{char:03o}'.encode('ascii'))
-        else:
-            out.append(char)
-    return bytes(out) + b'"'
+def _tree_from_paths(repo: Path, paths: dict[bytes, tuple[bytes, bytes]]) -> str:
+    """Write native Git tree objects from raw entries, sorted as Git requires.
+
+    The tree binary format is mode + SP + filename + NUL + raw object id.
+    This bypasses Git for Windows' fast-import checkout-path validation while
+    preserving the real bytes that production Git-history readers must parse.
+    """
+    root: dict[bytes, object] = {}
+    for path, (mode, oid) in paths.items():
+        parts = path.split(b'/')
+        if not path or b'\0' in path or any(p in (b'', b'.', b'..') for p in parts):
+            raise ValueError('Git fixture path must be non-empty and NUL-free with safe components')
+        node = root
+        for part in parts[:-1]:
+            child = node.setdefault(part, {})
+            if not isinstance(child, dict):
+                raise ValueError('Conflicting Git fixture file/directory path')
+            node = child
+        if isinstance(node.get(parts[-1]), dict):
+            raise ValueError('Conflicting Git fixture directory/file path')
+        node[parts[-1]] = (mode, oid)
+
+    def write_tree(entries: dict[bytes, object]) -> str:
+        ordered = []
+        for name, value in entries.items():
+            if isinstance(value, dict):
+                object_id = write_tree(value)
+                ordered.append((name, b'40000', object_id))
+            else:
+                mode, object_id = value
+                ordered.append((name, mode, object_id.decode('ascii')))
+        ordered.sort(key=lambda entry: entry[0] + (b'/' if entry[1] == b'40000' else b''))
+        raw = b''.join(mode + b' ' + name + b'\0' + bytes.fromhex(sha)
+                       for name, mode, sha in ordered)
+        return _git(repo, 'hash-object', '-w', '-t', 'tree', '--stdin', input_bytes=raw).strip().decode('ascii')
+
+    return write_tree(root)
 
 
 def commit_unsafe_paths(repo: Path, subject: str, additions: dict[str, str]) -> str:
-    """Commit Git objects containing paths unsupported by Windows filesystems.
+    """Commit test-only unsafe filename objects without checking them out.
 
-    An isolated temporary Git repository must be passed. Existing contents of
-    the working tree are deliberately not touched; no checkout is attempted.
+    Preserve an existing parent tree and its history when present; valid and
+    unsafe names must appear together in the exact Git tree under test.
     """
-    branch = _git(repo, 'symbolic-ref', 'HEAD')
-    previous = subprocess.run(
+    branch = _git(repo, 'symbolic-ref', 'HEAD').strip().decode('ascii')
+    parent = subprocess.run(
         ['git', '-C', str(repo), 'rev-parse', '--verify', 'HEAD'],
-        stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False,
+        capture_output=True, check=False,
     )
-    if previous.returncode not in (0, 128):
+    if parent.returncode not in (0, 128):
         raise AssertionError('Unexpected Git rev-parse error')
-    message = subject.encode('utf-8')
-    lines = [b'commit ' + branch, b'author Fixture <fixture@example.invalid> 1700000000 +0000',
-             b'committer Fixture <fixture@example.invalid> 1700000000 +0000',
-             b'data ' + str(len(message)).encode('ascii'), message]
-    if previous.returncode == 0:
-        lines.append(b'from ' + previous.stdout.strip())
-    for name, value in additions.items():
-        blob = value.encode('utf-8')
-        lines.extend([b'M 100644 inline ' + _quote_git_path(name),
-                      b'data ' + str(len(blob)).encode('ascii'), blob])
-    payload = b'\n'.join(lines) + b'\n'
-    _git(repo, 'fast-import', '--quiet', input_bytes=payload)
-    actual = _git(repo, 'rev-parse', 'HEAD').decode('ascii')
-    names = _git(repo, 'ls-tree', '-r', '-z', '--name-only', 'HEAD').split(b'\x00')
-    for name in additions:
-        if name.encode('utf-8') not in names:
-            raise AssertionError(f'Injected Git fixture path not present: {name!r}')
-    return actual
+    previous = parent.stdout.strip().decode('ascii') if parent.returncode == 0 else None
 
+    files: dict[bytes, tuple[bytes, bytes]] = {}
+    if previous:
+        listing = _git(repo, 'ls-tree', '--full-tree', '-r', '-z', previous)
+        for record in listing.split(b'\0'):
+            if not record:
+                continue
+            metadata, filename = record.split(b'\t', 1)
+            mode, kind, oid = metadata.split(b' ', 2)
+            if kind not in (b'blob', b'commit'):
+                raise AssertionError(f'Unexpected tree entry type: {kind!r}')
+            files[filename] = (mode, oid)
+
+    for name, contents in additions.items():
+        raw_name = name.encode('utf-8')
+        if not raw_name or b'\0' in raw_name:
+            raise ValueError('Git fixture path must be non-empty and NUL-free')
+        if any(part in (b'', b'.', b'..') for part in raw_name.split(b'/')):
+            raise ValueError('Git fixture path components must be nonempty and not dot segments')
+        sha = _git(repo, 'hash-object', '-w', '--stdin',
+                   input_bytes=contents.encode('utf-8')).strip()
+        files[raw_name] = (b'100644', sha)
+
+    root_tree = _tree_from_paths(repo, files)
+    options = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+               'commit-tree', root_tree, '-m', subject]
+    if previous:
+        options.extend(['-p', previous])
+    commit = _git(repo, *options).strip().decode('ascii')
+    _git(repo, 'update-ref', branch, commit, previous or '')
+    if _git(repo, 'rev-parse', 'HEAD').strip().decode('ascii') != commit:
+        raise AssertionError('Fixture commit ref did not move to the created commit')
+
+    result = _git(repo, 'ls-tree', '-r', '-z', '--name-only', 'HEAD').split(b'\0')
+    for name in additions:
+        if name.encode('utf-8') not in result:
+            raise AssertionError(f'Injected Git fixture path not present: {name!r}')
+    return commit
