@@ -53,6 +53,24 @@ class R8BrowserGateTests(unittest.TestCase):
         self.assertEqual(config.count('default: false'),6)
         self.assertEqual(config.count('      - store_artifacts:'),6)
 
+    def test_windows_browser_installer_keeps_stderr_separate_and_fails_on_real_exit_code(self):
+        config = (ROOT/'.circleci/config.yml').read_text(encoding='utf-8')
+        windows = config.split('  browser-windows:', 1)[1].split('  browser-macos:', 1)[0]
+        install = windows.split('name: Install pinned test-only Playwright and Chromium', 1)[1].split('      - run:', 1)[0]
+        self.assertIn('Start-Process -FilePath $browserPython', install)
+        self.assertIn('-RedirectStandardOutput $stdoutPath', install)
+        self.assertIn('-RedirectStandardError $stderrPath', install)
+        self.assertIn('-Wait -PassThru', install)
+        self.assertNotIn('2>&1 | Tee-Object', install)
+        self.assertIn('if ($process.ExitCode -ne 0)', install)
+        self.assertIn('browser-windows-install.log', install)
+        self.assertIn("Invoke-BrowserInstall -Stage 'pip'", install)
+        self.assertIn("Invoke-BrowserInstall -Stage 'chromium'", install)
+        self.assertIn("@('-m','pip','install','-r','requirements-browser-ci.txt')", install)
+        self.assertIn("@('-m','playwright','install','chromium')", install)
+        self.assertIn('when: always', windows)
+        self.assertIn('scripts/run_browser_evidence.py --platform Windows --out external-results/browser-windows --package-only', windows)
+
     def test_playwright_dependency_is_test_only_and_pinned(self):
         expected='playwright==1.65.2'
         req=(ROOT/'requirements-browser-ci.txt').read_text(encoding='utf-8')

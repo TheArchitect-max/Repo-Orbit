@@ -287,3 +287,30 @@ commercial demand. **R8 native CircleCI browser evidence is HOLD until run.**
 The MIT open-source path is selected, but adding an active LICENSE and
 creating a public release remain gated on complete technical and legal
 acceptance; no merge should occur before that decision.
+
+## R8 Windows native install remediation (2026-11-20)
+
+CircleCI R8 on `265032845eebbcd6bc4fff30c82d421e6bb28c30` reported
+Linux Chromium SUCCESS and macOS Chromium SUCCESS, but Windows FAILED during
+its **test-only** Playwright installation step. The Windows log
+`build_17_step_102_container_0.txt` shows both Playwright 1.65.2 and greenlet
+installed successfully before PowerShell raised `NativeCommandError` at a
+piped `python.exe -m pip` invocation. Native browser tests did not execute
+in that Windows attempt. It is not a browser-product failure.
+
+The Windows browser installer now starts pip and Chromium through
+PowerShell `Start-Process -Wait -PassThru` and redirects stdout/stderr to
+separate files. This prevents PowerShell 5.1 from turning benign native
+stderr into a terminating `NativeCommandError` under
+`$ErrorActionPreference = 'Stop'`. It records the real child process exit
+code, logs both output streams in `browser-windows-install.log`, and FAILS
+on any nonzero installer exit code. The existing `when: always` evidence
+finalization remains intact; no test or license requirement was relaxed.
+
+Only the Windows R8 browser job needs to be repeated on the patched SHA:
+Config Source Branch and Checkout Source Branch both
+`build/circleci-native-r4`, `run_browser_windows=true`, all five other
+`run_*` parameters false. Native Windows Chromium acceptance remains
+**HOLD until new CircleCI evidence**. Previously accepted R7 native CLI
+matrix is not invalidated by this Windows installer-only change.
+

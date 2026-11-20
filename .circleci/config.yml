@@ -168,10 +168,30 @@ jobs:
             New-Item -ItemType Directory -Path external-results -Force | Out-Null
             python -m venv .browser-venv
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & .\.browser-venv\Scripts\python.exe -m pip install -r requirements-browser-ci.txt 2>&1 | Tee-Object -FilePath external-results/browser-windows-install.log -Append
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            & .\.browser-venv\Scripts\python.exe -m playwright install chromium 2>&1 | Tee-Object -FilePath external-results/browser-windows-install.log -Append
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            $browserPython = (Resolve-Path '.\.browser-venv\Scripts\python.exe').Path
+            $installLog = Join-Path $PWD.Path 'external-results/browser-windows-install.log'
+            function Invoke-BrowserInstall {
+              param([string]$Stage, [string[]]$Arguments)
+              $stdoutPath = Join-Path $PWD.Path ("external-results/browser-windows-$Stage.stdout.log")
+              $stderrPath = Join-Path $PWD.Path ("external-results/browser-windows-$Stage.stderr.log")
+              # Keep native stderr separate: PowerShell 5.1 converts 2>&1 to
+              # NativeCommandError when ErrorActionPreference is Stop, even on exit 0.
+              $process = Start-Process -FilePath $browserPython -ArgumentList $Arguments -WorkingDirectory $PWD.Path -NoNewWindow -Wait -PassThru -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath
+              Add-Content -LiteralPath $installLog -Value ("STAGE: $Stage") -Encoding UTF8
+              foreach ($path in @($stdoutPath, $stderrPath)) {
+                if (Test-Path -LiteralPath $path) {
+                  $content = Get-Content -LiteralPath $path -Raw -Encoding UTF8
+                  if ($content) {
+                    Add-Content -LiteralPath $installLog -Value $content -Encoding UTF8
+                    Write-Host $content
+                  }
+                }
+              }
+              Add-Content -LiteralPath $installLog -Value ("EXIT_CODE: $($process.ExitCode)") -Encoding UTF8
+              if ($process.ExitCode -ne 0) { throw "HOLD: browser $Stage installation failed with exit code $($process.ExitCode)" }
+            }
+            Invoke-BrowserInstall -Stage 'pip' -Arguments @('-m','pip','install','-r','requirements-browser-ci.txt')
+            Invoke-BrowserInstall -Stage 'chromium' -Arguments @('-m','playwright','install','chromium')
       - run:
           name: Build deterministic Git fixtures and run native Chromium E2E
           no_output_timeout: 45m
