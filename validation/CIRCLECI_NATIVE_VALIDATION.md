@@ -40,6 +40,30 @@ To limit further credit consumption, first run only `run_linux=true`, with
 `run_windows=false` and `run_macos=false`. Verify the HTTPS checkout and
 preflight are PASS before the more expensive native Windows/macOS jobs.
 
+## R4 regression failure after HTTPS checkout — 2026-11-20
+
+The next Linux CircleCI run **passed SSH-free checkout and pinned source integrity**
+(`PASS: pinned source integrity; 10 regression test modules`) but stopped at
+the unittest gate: **96 tests run; 1 FAIL**. The failing test
+`test_cli_uses_offline_benchmark_after_full_history_fetch` searched for the
+source string `'--offline'`, whereas the committed benchmark runner uses
+the equivalent Python literal `"--offline"`. The same test also depended on
+the quote style of `--runs` and `--commits`. No benchmarks executed in
+that failed run.
+
+**Correction:** inspect the Python abstract syntax tree of the actual
+`subprocess.run` command argument list. Assert the semantically significant
+values `--offline`, `--targets`, `--runs 21`,
+`--commits 60 300 1000` and `--verify sample`, and confirm
+the pinned-history preparation call precedes benchmark invocation.
+This avoids assuming one specific formatting style or variable name.
+
+**Offline verification:** complete Linux Python regression suite **96/96 PASS**.
+Adversarial check accepts equivalent double-quoted arguments but rejects
+removal of the required `--offline` flag. These checks do not replace a native
+CircleCI PASS; that job remains **HOLD pending rerun** on the new branch HEAD.
+No change to the pinned product engine or benchmark implementation.
+
 ## Cost-controlled manual execution
 1. Connect this GitHub repository to CircleCI via GitHub App.
 2. In CircleCI Project Settings > Triggers, disable all automatic push/PR triggers.
