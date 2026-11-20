@@ -112,6 +112,16 @@ class CircleCIValidationTests(unittest.TestCase):
             self.assertEqual(hashlib.sha256((clone / 'pinned.py').read_bytes()).hexdigest(),
                              hashlib.sha256(expected).hexdigest())
 
+    def test_windows_preflight_failure_blocks_unit_tests(self):
+        config = (ROOT / '.circleci' / 'config.yml').read_text(encoding='utf-8')
+        windows = config.split('  native-windows:', 1)[1].split('  native-macos:', 1)[0]
+        lines = [line.strip() for line in windows.splitlines()]
+        marker = 'python scripts/preflight_circleci.py'
+        self.assertEqual(lines.count(marker), 1)
+        idx = lines.index(marker)
+        self.assertEqual(lines[idx + 1], 'if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }')
+        self.assertTrue(lines[idx + 2].startswith('python -m unittest discover'))
+
     def test_local_git_full_history_preparation(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)

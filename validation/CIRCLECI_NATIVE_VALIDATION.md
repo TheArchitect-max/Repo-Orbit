@@ -90,6 +90,13 @@ Native Windows **has not yet rerun** on this correction. Do not claim Windows
 PASS, performance parity, browser E2E PASS, or merge readiness until the
 corresponding external CircleCI evidence is inspected and accepted.
 
+**PowerShell fail-closed safeguard:** the previous Windows step continued to
+run unit tests even when `scripts/preflight_circleci.py` returned nonzero.
+Windows now explicitly checks `$LASTEXITCODE` immediately after the source
+preflight, before launching the unit suite. This is required to prevent
+benchmark work on any integrity-failed checkout. A dedicated regression test
+checks this sequencing. Local Linux suite on the full patch: **100/100 PASS**.
+
 ## Cost-controlled manual execution
 1. Connect this GitHub repository to CircleCI via GitHub App.
 2. In CircleCI Project Settings > Triggers, disable all automatic push/PR triggers.
