@@ -22,10 +22,41 @@ def git(*args, cwd=None, data=None):
 
 class CircleCIValidationTests(unittest.TestCase):
     def test_cli_uses_offline_benchmark_after_full_history_fetch(self):
-        src = SCRIPT.read_text()
-        self.assertIn("'--offline'", src)
-        self.assertIn("'--runs', '21'", src)
-        self.assertIn("'--commits', '60', '300', '1000'", src)
+        # Inspect Python argument values, not quote style or local variable names.
+        import ast
+
+        src = SCRIPT.read_text(encoding='utf-8')
+        module = ast.parse(src)
+        main = next(n for n in module.body
+                    if isinstance(n, ast.FunctionDef) and n.name == 'main')
+        executions = [n for n in ast.walk(main)
+                      if isinstance(n, ast.Call)
+                      and isinstance(n.func, ast.Attribute)
+                      and isinstance(n.func.value, ast.Name)
+                      and n.func.value.id == 'subprocess'
+                      and n.func.attr == 'run'
+                      and n.args and isinstance(n.args[0], ast.Name)]
+        self.assertEqual(len(executions), 1)
+        argv_name = executions[0].args[0].id
+        commands = [n for n in ast.walk(main)
+                    if isinstance(n, ast.Assign) and isinstance(n.value, ast.List)
+                    and any(isinstance(t, ast.Name) and t.id == argv_name
+                            for t in n.targets)]
+        self.assertEqual(len(commands), 1)
+        command = commands[0]
+        args = [n.value for n in command.value.elts
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+        self.assertIn('--offline', args)
+        self.assertIn('--targets', args)
+        self.assertEqual(args[args.index('--runs') + 1], '21')
+        self.assertEqual(args[args.index('--commits') + 1:
+                              args.index('--commits') + 4], ['60', '300', '1000'])
+        self.assertEqual(args[args.index('--verify') + 1], 'sample')
+        self.assertTrue(any(isinstance(n, ast.Call)
+                            and isinstance(n.func, ast.Name)
+                            and n.func.id == 'prep_one' and n.lineno < command.lineno
+                            for n in ast.walk(main)))
+        self.assertLess(command.lineno, executions[0].lineno)
         self.assertIn('Git history is still shallow', src)
 
     def test_original_core_and_render_hashes_remain_pinned(self):
