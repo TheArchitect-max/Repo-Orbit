@@ -31,11 +31,11 @@ The generated HTML runs locally without a REPO ORBIT backend. The `--redact` opt
 
 | Gate | Evidence / status |
 | --- | --- |
-| Python regressions | **95/95 PASS**, local Linux, on the source-only GitHub import candidate |
+| Python regressions | **106/106 PASS**, local Linux, R7 ZIP-tool candidate; final native R7 rerun pending |
 | Independent Git core/render hashes | **PASS** against pinned v0.7.0 and v0.8.0 hashes |
 | External Linux CLI benchmarks | **PASS** on pinned Requests, Flask and uv; 9/9 scenarios |
-| Native Windows CLI | **HOLD** — CircleCI evidence not yet collected |
-| Native macOS CLI | **HOLD** — CircleCI evidence not yet collected |
+| Native Windows CLI | **SUCCESS** in earlier CircleCI job; R7 same-commit ZIP and numerical audit **HOLD** |
+| Native macOS CLI | **SUCCESS** in earlier CircleCI job; R7 same-commit ZIP and numerical audit **HOLD** |
 | Windows/macOS browser acceptance | **HOLD** — separate gate |
 | MIT license and public release | **HOLD** — owner approval and remaining release checks |
 
@@ -45,11 +45,15 @@ The source-only repository intentionally excludes generated wheels, large demo m
 
 See [validation/CIRCLECI_NATIVE_VALIDATION.md](validation/CIRCLECI_NATIVE_VALIDATION.md) and [.circleci/config.yml](.circleci/config.yml).
 
-All CircleCI workflows default to **disabled**. In CircleCI, keep automatic VCS triggers removed. Run **one manually triggered native OS job at a time** with both Config Source Branch and Checkout Source Branch set to `build/circleci-native-r4`:
-
-- Windows: `run_windows=true`, leave the other parameters `false`.
-- macOS: `run_macos=true`, leave the other parameters `false`.
-- Linux: `run_linux=true` only if additional Linux evidence is required; R3 Linux evidence was already accepted.
+All CircleCI workflows default to **disabled**. Keep automatic VCS triggers
+removed. For the final R7 evidence run, manually trigger **all three** native
+platform jobs from the same commit. Set both Config Source Branch and Checkout
+Source Branch to `build/circleci-native-r4`, with `run_linux=true`,
+`run_windows=true` and `run_macos=true`. The three OS-specific jobs
+publish one complete downloadable evidence ZIP plus SHA-256 per platform.
+Use `scripts/audit_ci_zips.py` to verify all three ZIPs against the
+predeclared nine-cell CLI performance matrix. The separate browser E2E gate
+and public release/merge acceptance remain on HOLD.
 
 Each native job checks source integrity, runs the regression suite, retrieves the three pinned complete Git histories, and performs 21 paired measurements for each requested commit window. Inspect CircleCI results and save the job artifacts before granting acceptance. **CircleCI is for validation only, never for SaaS runtime.**
 

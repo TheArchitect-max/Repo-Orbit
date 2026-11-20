@@ -31,18 +31,15 @@ jobs:
             git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
-          name: Verify Python, Git, and original source integrity
-          command: |
-            python --version
-            python -c "import sys; assert sys.version_info >= (3, 10), sys.version"
-            git --version
-            python scripts/preflight_circleci.py
-            python -m unittest discover -s tests -p 'test_*.py'
-      - run:
-          name: Pinned full-history Requests, Flask and uv performance benchmarks
+          name: Native preflight, regression tests and pinned benchmarks with evidence
           no_output_timeout: 45m
           command: |
-            python -u scripts/run_circleci_native.py --out external-results/circleci-linux
+            python -u scripts/run_ci_evidence.py --platform Linux --out external-results/circleci-linux --run
+      - run:
+          name: Finalize self-contained evidence ZIP even when earlier tests fail
+          when: always
+          command: |
+            python -u scripts/run_ci_evidence.py --platform Linux --out external-results/circleci-linux --package-only
       - store_artifacts:
           path: external-results/circleci-linux
           destination: repo-orbit-linux
@@ -62,22 +59,16 @@ jobs:
             $actual = (git rev-parse HEAD).Trim()
             if ($LASTEXITCODE -ne 0 -or $actual -ne $env:CIRCLE_SHA1) { throw 'HOLD: checkout SHA mismatch' }
       - run:
-          name: Verify native Windows, Python, Git and source integrity
-          command: |
-            $ErrorActionPreference = 'Stop'
-            python --version
-            python -c "import sys; assert sys.version_info >= (3, 10), sys.version"
-            git --version
-            python scripts/preflight_circleci.py
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-            python -m unittest discover -s tests -p 'test_*.py'
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-      - run:
-          name: Pinned full-history Requests, Flask and uv performance benchmarks
+          name: Native preflight, regression tests and pinned benchmarks with evidence
           no_output_timeout: 45m
           command: |
-            $ErrorActionPreference = 'Stop'
-            python -u scripts/run_circleci_native.py --out external-results/circleci-windows
+            python -u scripts/run_ci_evidence.py --platform Windows --out external-results/circleci-windows --run
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - run:
+          name: Finalize self-contained evidence ZIP even when earlier tests fail
+          when: always
+          command: |
+            python -u scripts/run_ci_evidence.py --platform Windows --out external-results/circleci-windows --package-only
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - store_artifacts:
           path: external-results/circleci-windows
@@ -97,18 +88,15 @@ jobs:
             git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
-          name: Verify native macOS, Python, Git and source integrity
-          command: |
-            python3 --version
-            python3 -c "import sys; assert sys.version_info >= (3, 10), sys.version"
-            git --version
-            python3 scripts/preflight_circleci.py
-            python3 -m unittest discover -s tests -p 'test_*.py'
-      - run:
-          name: Pinned full-history Requests, Flask and uv performance benchmarks
+          name: Native preflight, regression tests and pinned benchmarks with evidence
           no_output_timeout: 45m
           command: |
-            python3 -u scripts/run_circleci_native.py --out external-results/circleci-macos
+            python3 -u scripts/run_ci_evidence.py --platform Darwin --out external-results/circleci-macos --run
+      - run:
+          name: Finalize self-contained evidence ZIP even when earlier tests fail
+          when: always
+          command: |
+            python3 -u scripts/run_ci_evidence.py --platform Darwin --out external-results/circleci-macos --package-only
       - store_artifacts:
           path: external-results/circleci-macos
           destination: repo-orbit-macos

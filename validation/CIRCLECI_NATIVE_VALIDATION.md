@@ -146,6 +146,55 @@ macOS CircleCI PASS. Re-run only macOS on the repaired branch HEAD and
 inspect the job logs before concluding platform acceptance.
 PR #1 remains DRAFT/HOLD; no merge.
 
+## R7 — complete host ZIP artifact protocol (2026-11-20)
+
+All three native CircleCI executors have now reported SUCCESS individually:
+- Linux: CircleCI native job on `972837345f388bb87ab7c65920cb56fe84c61697`.
+- Windows: CircleCI native job on `cb48e709e602ee09dfeef2c698d0f52291d43236`.
+- macOS: CircleCI native job on `bcf6eefcd425d396117a093a67e25fee33710def`.
+
+These are three independent CI successes on **different commits**. They do not
+yet constitute a validated same-commit native benchmark matrix.
+
+R7 changes only CircleCI evidence infrastructure and documentation, not the
+pinned v0.7/v0.8 engines or predeclared benchmark sample. Each platform now:
+
+1. Checks out the exact CircleCI commit via public HTTPS, rejects mismatches.
+2. Captures the tracked source snapshot, SHA-256 of every source file, pinned
+   benchmark targets, CircleCI commit/tree context and Python environment.
+3. Runs the source-integrity preflight, full Python regression suite and pinned
+   21-run benchmark matrix, preserving complete per-step stdout/stderr and exit
+   codes. A failed gate prevents later benchmark execution.
+4. Independently validates the three host/repository evidence cells against
+   the original 5% regression, parity, SHA, history and 60/300/1000 commit
+   requirements; missing or invalid evidence remains FAIL/HOLD.
+5. In a CircleCI `when: always` step, publishes **one** platform-specific
+   `REPO_ORBIT_R7_<OS>_<SHA>_EVIDENCE.zip` and its `.sha256` file in the
+   job's Artifacts, **including when an earlier step failed**.
+   The ZIP includes `CI_PLATFORM_AUDIT.json`, `CI_CONTEXT.json`,
+   `RUN_STAGE_STATUS.json`, `SOURCE_SHA256.json`,
+   `SOURCE_SNAPSHOT/`, `PYTHON_DISTRIBUTIONS.json`,
+   `PINNED_TARGETS.json`, full `logs/`, `measurements/` and
+   `SHA256_MANIFEST.json`. ZIP CRC and member hashes are verified.
+
+**Final CI execution:** manually select `build/circleci-native-r4` as both
+Config Source Branch and Checkout Source Branch; select
+`run_linux=true`, `run_windows=true` and `run_macos=true` together.
+Automatic GitHub triggers must remain disabled. Download all three ZIPs
+and their SHA-256 companions before any merge.
+
+**Independent cross-host audit:** after downloading all three ZIPs, run:
+
+```sh
+python scripts/audit_ci_zips.py LINUX_EVIDENCE.zip WINDOWS_EVIDENCE.zip MACOS_EVIDENCE.zip --out R7_CROSS_PLATFORM_AUDIT.json
+```
+
+This rejects mismatched commit/tree identities, missing ZIP members, corrupt
+hashes, incomplete test evidence, nonnative results, wrong pinned targets,
+parity failures and >5% regressions. Full native 9-cell success proves only
+the **predeclared CLI benchmark scope**. Cross-platform browser E2E remains
+a separate HOLD gate. PR #1 remains DRAFT until all mandatory gates PASS.
+
 ## Cost-controlled manual execution
 1. Connect this GitHub repository to CircleCI via GitHub App.
 2. In CircleCI Project Settings > Triggers, disable all automatic push/PR triggers.
@@ -154,13 +203,12 @@ PR #1 remains DRAFT/HOLD; no merge.
 3. Select **Trigger Pipeline**.
 4. Set both **Config Source Branch** and **Checkout Source Branch** to
    `build/circleci-native-r4`.
-5. First use `run_linux=true`, with the other `run_*` parameters false. After
-   the repaired checkout is verified on CircleCI, run Windows and macOS
-   separately and capture each job's native evidence.
-6. Collect `FULL_HISTORY_STATUS.json`, `RUN_STATUS.json`, `HOST.json`,
-   per-repository JSON and stdout logs in each job's Artifacts.
-7. Run the repository's `scripts/audit_native_matrix.py` only after all
-   required native artifacts are available.
+5. R7 final replay: set **all three** `run_linux=true`, `run_windows=true`
+   and `run_macos=true` on the same updated branch commit.
+6. Download each host's `REPO_ORBIT_R7_<OS>_<SHA>_EVIDENCE.zip` and
+   its `.sha256` companion from the corresponding CircleCI job's Artifacts.
+7. Run `scripts/audit_ci_zips.py` against the three downloaded ZIPs, inspect
+   its nine-cell native benchmark audit, and keep the separate browser gate HOLD.
 
 ## Acceptance
 All benchmarks use pinned Requests, Flask and uv history at 60, 300 and 1000
