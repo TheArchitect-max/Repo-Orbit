@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 import argparse
+import base64
 import hashlib
 import json
 import math
@@ -19,11 +20,14 @@ BASELINE = ROOT / 'baselines' / 'v0.8.0' / 'repoorbit' / 'viewer.js'
 CANDIDATE = ROOT / 'repoorbit' / 'viewer.js'
 BASE_SHA = '8747ec9eec22b26840235eb3d4329e3e5ea02fc71cb7e6fcedb6ce119dc573ae'
 EXPECTED_DATASET = '1de6f6fbe504db5bacdb1e1be1b178404b969f1cd3ef3dacf24d7f310f25bf63'
+# Exact image evidence, not only a claimed Boolean or an unauditable hash.
+PARITY_CASES = ('frame_4000', 'frame_8000', 'filtered_8000')
 INSTRUMENT = r'''<script>
-window.__r9draw=[]; window.__r9on=false;
+window.__r9draw=[]; window.__r9on=false; window.__r9drawFn=null;
 const originalRAF=window.requestAnimationFrame.bind(window);
 window.requestAnimationFrame=function(callback){
  if(callback.name!=='draw')return originalRAF(callback);
+ window.__r9drawFn=callback;
  return originalRAF(function(ts){
    if(!window.__r9on)return callback(ts);
    const start=performance.now();
@@ -58,7 +62,7 @@ def html_variants(source: Path) -> dict[str,str]:
     return {'r8':add_instrumentation(old_html),'r9':add_instrumentation(html)}
 
 
-def benchmark(html: Path, pairs: int = 21) -> dict:
+def benchmark(html: Path, pairs: int = 21, artifact_dir: Path | None = None) -> dict:
     if pairs < 21:
         raise ValueError('Predeclared R9 acceptance requires at least 21 paired draws')
     from playwright.sync_api import sync_playwright
@@ -106,20 +110,54 @@ def benchmark(html: Path, pairs: int = 21) -> dict:
                     page.locator('#scrub').fill(target)
                     page.wait_for_function('(n)=>window.__r9draw.length>n',arg=before,timeout=30000)
                     raw[label].append(page.evaluate('window.__r9draw[window.__r9draw.length-1]'))
-            # Compare exact raster output on the same final Git frame.
+            # Verify several independent states, not only a favorable final frame.
+            # Include actual immutable PNG bytes in the host evidence ZIP so the
+            # independent auditor can recompute every recorded pixel digest.
+            snapshots = {}
+            for case in PARITY_CASES:
+                for label, page in pages.items():
+                    page.evaluate('window.__r9on=false')
+                    if case == 'frame_4000':
+                        page.locator('#scrub').fill('4000')
+                    elif case == 'frame_8000':
+                        page.locator('#scrub').fill('8000')
+                    elif case == 'filtered_8000':
+                        page.locator('#search').fill('src/cluster_00')
+                    page.evaluate('window.__r9drawFn(0)')
+                snapshots[case] = {}
+                for label, page in pages.items():
+                    encoded = page.locator('#orbit').evaluate('(c)=>c.toDataURL("image/png")')
+                    if not encoded.startswith('data:image/png;base64,'):
+                        raise RuntimeError('Canvas PNG encoder failed')
+                    raw_png = base64.b64decode(encoded.split(',',1)[1], validate=True)
+                    if not raw_png.startswith(b'\x89PNG\r\n\x1a\n') or len(raw_png) < 1000:
+                        raise RuntimeError('Invalid Canvas PNG raster')
+                    relative = f'R9_PIXELS/{view}_{case}_{label}.png'
+                    if artifact_dir is not None:
+                        dest = artifact_dir / relative
+                        dest.parent.mkdir(parents=True, exist_ok=True)
+                        dest.write_bytes(raw_png)
+                    snapshots[case][label] = {
+                        'sha256': sha_bytes(raw_png), 'bytes': len(raw_png),
+                        'path': relative,
+                        'dom': {key: page.locator('#'+key).inner_text()
+                                for key in ('statfiles','timeposition','frameinfo','matchcount')},
+                    }
+                if snapshots[case]['r8']['sha256'] != snapshots[case]['r9']['sha256'] or snapshots[case]['r8']['dom'] != snapshots[case]['r9']['dom']:
+                    raise RuntimeError(f'R9 visual or UI parity failed: {view}/{case}')
+            pixels = {name:snapshots['frame_8000'][name]['sha256'] for name in ('r8','r9')}
             for page in pages.values():
-                page.evaluate('window.__r9on=false')
-                page.locator('#scrub').fill('8000')
-                page.wait_for_timeout(100)
-            pixels={name:sha_bytes(pages[name].locator('#orbit').evaluate('(c)=>c.toDataURL("image/png")').encode())
-                    for name in ('r8','r9')}
+                page.locator('#search').fill('')
             med={name:statistics.median(raw[name]) for name in ('r8','r9')}
             ratio=med['r8']/med['r9'] if med['r9'] else 0
             result['modes'][view]={'baseline_draw_ms':raw['r8'],'candidate_draw_ms':raw['r9'],
                                    'baseline_median_ms':med['r8'],'candidate_median_ms':med['r9'],
                                    'speedup_x':ratio,'pixel_sha256':pixels,
                                    'pixel_exact':pixels['r8']==pixels['r9'],
-                                   'gate':'PASS' if ratio>=3.0 and pixels['r8']==pixels['r9'] else 'FAIL'}
+                                   'visual_parity':snapshots,
+                                   'gate':'PASS' if ratio>=3.0 and pixels['r8']==pixels['r9'] and all(
+                                       x['r8']['sha256']==x['r9']['sha256'] and x['r8']['dom']==x['r9']['dom']
+                                       for x in snapshots.values()) else 'FAIL'}
         result['javascript_errors']=errors
         result['external_network_requests']=network
         result['heap_bytes']={name:pages[name].evaluate('performance.memory.usedJSHeapSize') for name in pages}
@@ -174,6 +212,29 @@ def validate_performance(report: dict, candidate_sha: str | None = None) -> list
         hashes=obj.get('pixel_sha256',{})
         if not obj.get('pixel_exact') or not isinstance(hashes,dict) or not hashes.get('r8') or hashes.get('r8')!=hashes.get('r9'):
             errors.append(mode+':nonidentical_raster')
+        cases = obj.get('visual_parity', {})
+        if set(cases) != set(PARITY_CASES):
+            errors.append(mode+':visual_parity_case_set_mismatch')
+        for case in PARITY_CASES:
+            pair = cases.get(case, {})
+            if set(pair) != {'r8','r9'}:
+                errors.append(mode+':'+case+':missing_raster_pair')
+                continue
+            for label in ('r8','r9'):
+                image = pair[label]
+                expected_path = f'R9_PIXELS/{mode}_{case}_{label}.png'
+                digest = image.get('sha256')
+                if (image.get('path') != expected_path or
+                    not isinstance(image.get('bytes'), int) or image['bytes'] < 1000 or
+                    not isinstance(digest, str) or len(digest) != 64 or
+                    any(c not in '0123456789abcdef' for c in digest) or
+                    not isinstance(image.get('dom'), dict) or
+                    set(image['dom']) != {'statfiles','timeposition','frameinfo','matchcount'}):
+                    errors.append(mode+':'+case+':invalid_raster_metadata')
+            if pair['r8'].get('sha256') != pair['r9'].get('sha256') or pair['r8'].get('dom') != pair['r9'].get('dom'):
+                errors.append(mode+':'+case+':visual_or_dom_mismatch')
+        if cases.get('frame_8000',{}).get('r8',{}).get('sha256') != hashes.get('r8'):
+            errors.append(mode+':final_frame_sha_not_linked')
         if ratio<3.0 or obj.get('gate')!='PASS':
             errors.append(mode+':performance_gate_not_pass')
     return errors
@@ -186,7 +247,7 @@ def main() -> int:
     parser.add_argument('--pairs',type=int,default=21)
     args=parser.parse_args()
     try:
-        report=benchmark(args.html,args.pairs)
+        report=benchmark(args.html,args.pairs,args.out.resolve().parent)
     except Exception as exc:
         report={'acceptance':'FAIL','error':type(exc).__name__+': '+str(exc)}
     if report.get('acceptance') == 'PASS_WITHIN_PREDECLARED_SCOPE':

@@ -23,6 +23,7 @@ from scripts.run_ci_evidence import (build_zip, digest, now, provenance,
 from scripts.audit_native_matrix import audit_browser
 from scripts.browser_payload_integrity import inspect_fixture
 from scripts.benchmark_viewer_r9 import validate_performance, sha_bytes
+from scripts.r9_raster_evidence import inspect_png_artifacts
 
 PLATFORMS = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'macos'}
 PLAYWRIGHT_PIN = '1.65.2'
@@ -195,6 +196,9 @@ def evaluate_platform(staging: Path, system: str) -> dict:
         perf_errors = validate_performance(perf,candidate_sha)
         if perf_errors:
             errors.append({'type':'r9_performance_gate_failed','details':perf_errors})
+        png_errors = inspect_png_artifacts(perf, lambda path:(staging/path).read_bytes())
+        if png_errors:
+            errors.append({'type':'r9_png_artifacts_failed','details':png_errors})
         summary = audit_browser([browser], expected, [system])
         if summary['status'] != 'PASS_WITHIN_PREDECLARED_SCOPE':
             errors.append({'type': 'native_browser_requirements_not_pass',

@@ -7,8 +7,9 @@ import json
 import unittest
 from pathlib import Path
 
-from scripts.benchmark_viewer_r9 import (BASE_SHA, EXPECTED_DATASET,
+from scripts.benchmark_viewer_r9 import (BASE_SHA, EXPECTED_DATASET, PARITY_CASES,
                                          validate_performance, html_variants)
+from scripts.r9_raster_evidence import inspect_png_artifacts
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -23,7 +24,13 @@ def sample_report() -> dict:
             'modes':{view:{'baseline_draw_ms':[24.0]*21,'candidate_draw_ms':[3.0]*21,
                            'baseline_median_ms':24.0,'candidate_median_ms':3.0,
                            'speedup_x':8.0,'gate':'PASS','pixel_exact':True,
-                           'pixel_sha256':{'r8':'a'*64,'r9':'a'*64}}
+                           'pixel_sha256':{'r8':'a'*64,'r9':'a'*64},
+                           'visual_parity':{case:{label:{'path':f'R9_PIXELS/{view}_{case}_{label}.png',
+                                              'bytes':1200,'sha256':'a'*64,
+                                              'dom':{'statfiles':'80000','timeposition':'FRAME 8000 / 8000',
+                                                     'frameinfo':'80000 TRACKED FILES','matchcount':''}}
+                                                   for label in ('r8','r9')}
+                                            for case in PARITY_CASES}}
                      for view in ('orbit','atlas')}}
 
 
@@ -56,6 +63,25 @@ class R9PerformanceGates(unittest.TestCase):
             elif flaw=='network':report['external_network_requests']=['https://not-permitted.example']
             with self.subTest(flaw=flaw):
                 self.assertTrue(validate_performance(report,candidate))
+
+    def test_runner_and_archive_auditor_import_native_png_integrity_gate(self):
+        from scripts import run_browser_evidence, audit_browser_zips
+        self.assertIs(run_browser_evidence.inspect_png_artifacts, inspect_png_artifacts)
+        self.assertIs(audit_browser_zips.inspect_png_artifacts, inspect_png_artifacts)
+
+    def test_missing_or_tampered_real_png_evidence_rejected(self):
+        report = sample_report()
+        self.assertEqual(validate_performance(report, report['candidate_viewer_sha256']), [])
+        missing = inspect_png_artifacts(report, lambda path: (_ for _ in ()).throw(KeyError(path)))
+        self.assertEqual(len(missing), 12)
+        def wrong_png(_):
+            return b"\x89PNG\r\n\x1a\n" + b"fake" * 400
+        tampered = inspect_png_artifacts(report, wrong_png)
+        self.assertTrue(any(':wrong_sha256' in value for value in tampered))
+        altered = copy.deepcopy(report)
+        altered['modes']['atlas']['visual_parity']['frame_4000']['r9']['sha256'] = 'b'*64
+        self.assertIn('atlas:frame_4000:visual_or_dom_mismatch',
+                      validate_performance(altered, altered['candidate_viewer_sha256']))
 
     def test_browser_pipeline_fails_closed_on_missing_r9_evidence(self):
         from scripts.run_browser_evidence import STAGES

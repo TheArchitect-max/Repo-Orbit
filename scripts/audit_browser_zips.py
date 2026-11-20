@@ -18,6 +18,7 @@ if str(ROOT) not in sys.path:
 from scripts.audit_native_matrix import audit_browser
 from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
 from scripts.benchmark_viewer_r9 import validate_performance
+from scripts.r9_raster_evidence import inspect_png_artifacts
 
 OS_SET = {'Linux', 'Windows', 'Darwin'}
 BROWSER_HASHES = ROOT/'validation'/'BROWSER_EXPECTED_SHA256.json'
@@ -96,6 +97,9 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
         problems=validate_performance(perf,candidate_sha)
         if problems:
             raise ValueError('Independent R9 paired rendering gate failed: '+repr(problems))
+        pixel_problems = inspect_png_artifacts(perf, z.read)
+        if pixel_problems:
+            raise ValueError('Independent R9 archived pixel evidence failed: '+repr(pixel_problems))
         if sha_bytes(z.read('SOURCE_SNAPSHOT/baselines/v0.8.0/repoorbit/viewer.js')) != perf['baseline_viewer_sha256']:
             raise ValueError('R8 immutable viewer source snapshot mismatch')
         if fixtures.get('status') != 'PASS' or not fixtures.get('git_fixture_head'):

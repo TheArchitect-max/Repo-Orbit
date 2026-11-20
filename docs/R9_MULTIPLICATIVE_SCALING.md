@@ -39,3 +39,23 @@ Two repeated local runs exceeded the **predeclared native acceptance threshold o
 ## Next steps and constraints
 
 Re-run the three **browser-only** CircleCI jobs manually with `run_browser_linux=true`, `run_browser_windows=true`, `run_browser_macos=true`, all CLI parameters false, both branch selector fields `build/circleci-native-r4`, and automatic triggers disabled. Verify one ZIP + `.sha256` per OS on exactly the new SHA, then execute `scripts/audit_browser_zips.py` on all three original files. Keep PR #1 Draft/HOLD; no public MIT release or merge until outstanding security, licensing and independent accessibility requirements are accepted.
+
+## R9 follow-up: independently inspectable pixel evidence (pre-native hardening)
+
+Before the first native R9 performance acceptance, the single-final-frame
+comparison is extended to **three independent visual states per mode**:
+frame 4,000, frame 8,000, and frame 8,000 with a real 80,000-path search
+filter. Both the accepted R8 renderer and R9 renderer are compared with
+identical input data and viewport. Each state records exact Canvas PNG bytes,
+SHA-256, length and selected live DOM counters. All **12 actual PNG artifacts**
+are retained in each host evidence ZIP under `R9_PIXELS/`. The acceptance
+recomputes reported digests from these bytes, checks baseline/candidate
+pixel identity, DOM parity and rejects missing or modified images. The
+predeclared >=3x median draw speed threshold and 21 measured pairs per
+mode remain **unchanged**. This strengthens correctness evidence without
+claiming additional acceleration. The new source commit requires an entirely
+new native R9 evidence run; old R9 local numbers remain historical.
+
+This is **not** an external accessibility or security certification; native
+CircleCI evidence remains HOLD until its three independent same-SHA ZIPs
+pass the cross-platform audit. Do not merge PR #1 before that acceptance.
