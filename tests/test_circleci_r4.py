@@ -83,10 +83,34 @@ class CircleCIValidationTests(unittest.TestCase):
         self.assertNotIn('      - checkout', config)
         url = 'https://github.com/TheArchitect-max/Repo-Orbit.git'
         self.assertEqual(config.count('git clone --quiet --no-checkout ' + url), 3)
-        self.assertEqual(config.count('git -c advice.detachedHead=false checkout --quiet --detach'), 3)
+        self.assertEqual(config.count('git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach'), 3)
         self.assertEqual(config.count('HOLD: missing CIRCLE_SHA1'), 3)
         self.assertEqual(config.count('HOLD: checkout SHA mismatch'), 3)
         self.assertNotIn('git@github.com:', config)
+
+    def test_native_checkout_preserves_exact_lf_source_bytes(self):
+        import hashlib
+        attrs = (ROOT / '.gitattributes').read_text(encoding='utf-8')
+        self.assertIn('*.py text eol=lf', attrs)
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            source = temp / 'source'
+            clone = temp / 'clone'
+            git('init', '-q', '-b', 'main', str(source))
+            git('config', 'user.name', 'Checkout Test', cwd=source)
+            git('config', 'user.email', 'checkout@example.invalid', cwd=source)
+            (source / '.gitattributes').write_text(attrs, encoding='utf-8', newline='\n')
+            expected = b'hello\nworld\n'
+            (source / 'pinned.py').write_bytes(expected)
+            git('add', '-A', cwd=source)
+            git('commit', '-qm', 'pin LF bytes', cwd=source)
+            pin = git('rev-parse', 'HEAD', cwd=source)
+            git('clone', '-q', '--no-checkout', str(source), str(clone))
+            git('-c', 'core.autocrlf=true', 'config', '--local', 'core.autocrlf', 'true', cwd=clone)
+            git('-c', 'core.autocrlf=false', '-c', 'advice.detachedHead=false',
+                'checkout', '-q', '--detach', pin, cwd=clone)
+            self.assertEqual(hashlib.sha256((clone / 'pinned.py').read_bytes()).hexdigest(),
+                             hashlib.sha256(expected).hexdigest())
 
     def test_local_git_full_history_preparation(self):
         with tempfile.TemporaryDirectory() as d:

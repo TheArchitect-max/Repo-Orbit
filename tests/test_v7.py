@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from repoorbit.core import OrbitError, _git_output, analyze
 from repoorbit.render import render
+from portable_git import commit_unsafe_paths
 
 POPEN = subprocess.Popen
 
@@ -56,10 +57,7 @@ class V7Tests(unittest.TestCase):
         self.assertIs(found['dirty'], False)
 
     def test_path_control_characters_replay_as_json_without_code_execution(self):
-        unusual = self.repo / 'src\x01control.txt'
-        unusual.write_text('control',encoding='utf-8')
-        git(self.repo,'add','-A')
-        git(self.repo,'commit','-qm','control-char-test')
+        commit_unsafe_paths(self.repo, 'control-char-test', {'src\x01control.txt':'control'})
         data=analyze(self.repo,verification='full')
         self.assertIn('src\x01control.txt', [p for row in data['commits'] for _code,p in row['changes']])
         self.assertIn('src\\u0001control.txt', render(data,compression='plain'))

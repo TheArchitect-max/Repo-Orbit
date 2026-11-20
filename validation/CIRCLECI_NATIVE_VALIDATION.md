@@ -64,6 +64,32 @@ removal of the required `--offline` flag. These checks do not replace a native
 CircleCI PASS; that job remains **HOLD pending rerun** on the new branch HEAD.
 No change to the pinned product engine or benchmark implementation.
 
+## Native Windows CircleCI failure — R5 remedial controls (2026-11-20)
+
+The first native Windows run on `972837345f388bb87ab7c65920cb56fe84c61697`
+reached Python 3.14.9 / Git 2.56.0.windows.3 but **FAILED** its source
+integrity check and 11 of 96 tests (5 FAIL, 6 ERROR, 3 SKIP).
+**All Windows performance measurements remain HOLD.**
+
+Three independent causes were identified from `build_8_step_102_container_0.txt`:
+1. Git Windows CRLF checkout changed the bytes of pinned v0.7.0 core.
+   A repository-wide `.gitattributes` now requires LF for Python, YAML, JSON
+   and Markdown; the three CI checkouts explicitly disable `core.autocrlf`
+   for the source checkout. Pinned source hashes were **not** changed.
+2. Five adversarial Git-filename tests tried to create Unix-only characters
+   as Windows filenames. They now use in-memory Git fast-import objects,
+   retaining actual Git-tree replay, security and escaping assertions on
+   every host; nothing is skipped to produce artificial green.
+3. The CLI printed Unicode arrows and middle dots to cp1252 stdout, raising
+   `UnicodeEncodeError` on Windows. Its CLI status text now uses plain ASCII.
+
+Offline Linux validation of the repaired source: **99/99 tests PASS**;
+retested with `PYTHONIOENCODING=cp1252`, also **99/99 PASS**; all four
+pinned v0.7.0/v0.8.0 source SHA-256 digests remain unchanged and match.
+Native Windows **has not yet rerun** on this correction. Do not claim Windows
+PASS, performance parity, browser E2E PASS, or merge readiness until the
+corresponding external CircleCI evidence is inspected and accepted.
+
 ## Cost-controlled manual execution
 1. Connect this GitHub repository to CircleCI via GitHub App.
 2. In CircleCI Project Settings > Triggers, disable all automatic push/PR triggers.

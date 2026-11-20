@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 from repoorbit.core import OrbitError, _history_batch, _commit_rows, _changes, analyze
 from repoorbit.render import render
+from portable_git import commit_unsafe_paths
 
 
 def git(root, *args):
@@ -68,7 +69,7 @@ class BatchGate(unittest.TestCase):
         self.assertEqual(state[1]['versions'][state[1]['changes'].index(['A','new.py'])],state[0]['versions'][0])
     def test_adversarial_marker_like_filenames_and_html_escape(self):
         name='COMMIT:'+('a'*40)
-        self.commit('a commit marker',[(name,'x'),('line\nbreak.txt','y'),('<script>.js','z'),('café.py','q')])
+        commit_unsafe_paths(self.root, 'a commit marker', dict([(name,'x'),('line\nbreak.txt','y'),('<script>.js','z'),('café.py','q')]))
         self.parity()
         html=render(analyze(self.root,share_safe=True))
         self.assertNotIn('<script>.js',html)

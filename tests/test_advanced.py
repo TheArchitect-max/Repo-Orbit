@@ -12,6 +12,7 @@ from unittest.mock import patch
 from repoorbit.__main__ import _atomic_write
 from repoorbit.core import OrbitError, analyze, _redacted_paths
 from repoorbit.render import render
+from portable_git import commit_unsafe_paths
 
 
 def git(repo, *args):
@@ -74,7 +75,7 @@ class V2Tests(Repository):
 
     def test_render_escapes_adversarial_subject_and_path(self):
         payload='</script><script>throw new Error("INJECTED")</script>'
-        self.commit(payload, {'src/'+payload+'.txt':'safe'})
+        commit_unsafe_paths(self.repo, payload, {'src/'+payload+'.txt':'safe'})
         html=render(analyze(self.repo))
         self.assertNotIn(payload,html)
         self.assertEqual(html.count('<script'),2)

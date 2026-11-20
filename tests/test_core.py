@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from repoorbit.core import OrbitError, analyze
 from repoorbit.render import render
+from portable_git import commit_unsafe_paths
 
 
 def git(repo, *args):
@@ -72,7 +73,7 @@ class CoreTests(RepoFixture):
         self.assertEqual(result['commits'][0]['sha'],'event-0001')
 
     def test_html_protects_against_script_breakout(self):
-        self.commit('</script><script>alert(42)</script>',{'bad</script>.py':'ok'})
+        commit_unsafe_paths(self.repo, '</script><script>alert(42)</script>', {'bad</script>.py':'ok'})
         document=render(analyze(self.repo))
         self.assertNotIn('</script><script>alert(42)</script>',document)
         self.assertIn('\\u003c/script\\u003e',document)
@@ -80,7 +81,7 @@ class CoreTests(RepoFixture):
         self.assertEqual(document.count('<script'),2)
 
     def test_git_filenames_with_spaces_and_newlines(self):
-        self.commit('strange paths',{'path with spaces.txt':'a','line\nbreak.txt':'b'})
+        commit_unsafe_paths(self.repo, 'strange paths', {'path with spaces.txt':'a','line\nbreak.txt':'b'})
         result=analyze(self.repo)
         paths=[p for _,p in result['commits'][0]['changes']]
         self.assertIn('path with spaces.txt',paths)

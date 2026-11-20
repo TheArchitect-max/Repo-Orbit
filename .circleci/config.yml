@@ -28,7 +28,7 @@ jobs:
             set -euo pipefail
             test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
             git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            git -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
+            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
           name: Verify Python, Git, and original source integrity
@@ -57,7 +57,7 @@ jobs:
             if ([string]::IsNullOrWhiteSpace($env:CIRCLE_SHA1)) { throw 'HOLD: missing CIRCLE_SHA1' }
             git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
             if ($LASTEXITCODE -ne 0) { throw 'HOLD: HTTPS clone failed' }
-            git -c advice.detachedHead=false checkout --quiet --detach $env:CIRCLE_SHA1
+            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach $env:CIRCLE_SHA1
             if ($LASTEXITCODE -ne 0) { throw 'HOLD: commit checkout failed' }
             $actual = (git rev-parse HEAD).Trim()
             if ($LASTEXITCODE -ne 0 -or $actual -ne $env:CIRCLE_SHA1) { throw 'HOLD: checkout SHA mismatch' }
@@ -93,7 +93,7 @@ jobs:
             set -euo pipefail
             test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
             git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            git -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
+            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
           name: Verify native macOS, Python, Git and source integrity

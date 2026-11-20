@@ -75,9 +75,9 @@ def main(argv: list[str] | None = None) -> int:
     except (OrbitError, OSError, ValueError) as exc:
         print(f"Repo Orbit: {exc}", file=sys.stderr)
         return 2
-    print(f"Repo Orbit → {target}")
-    print(f"{data['history_window']} commits · {data['changes_total']} changes · "
-          f"{data['files_final']} files · {data['verified_frames']} checked snapshots")
+    print(f"Repo Orbit -> {target}")
+    print(f"{data['history_window']} commits | {data['changes_total']} changes | "
+          f"{data['files_final']} files | {data['verified_frames']} checked snapshots")
     if data["partial_history"]:
         print(f"Recent window: {data['history_window']} of {data['history_total']} first-parent commits.")
     if args.exclude:
