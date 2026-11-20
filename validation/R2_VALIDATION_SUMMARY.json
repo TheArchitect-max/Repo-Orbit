@@ -1,0 +1,48 @@
+{
+  "title": "REPO ORBIT v0.8.0 - R2 External Native Validation",
+  "evaluation_date": "2026-11-20",
+  "software_version": "0.8.0",
+  "runtime_modifications": false,
+  "original_v08_engine_renderer_viewer": "BYTE_IDENTICAL",
+  "original_v07_comparison_sources": "BYTE_IDENTICAL",
+  "python_regression_tests": "91/91 PASS",
+  "linux_native_chromium_tests": "3/3 PASS",
+  "measured_real_repository": "novnc/noVNC",
+  "measured_real_repository_sha": "7fcf9dcfe0cc5b14e3841a4429dc091a6ffca861",
+  "paired_runs": 21,
+  "windows": [
+    {
+      "commits": 60,
+      "v07_ms": 42.3788,
+      "v08_ms": 40.9325,
+      "speedup_v07_div_v08": 1.0353
+    },
+    {
+      "commits": 300,
+      "v07_ms": 50.1865,
+      "v08_ms": 48.0106,
+      "speedup_v07_div_v08": 1.0453
+    },
+    {
+      "commits": 1000,
+      "v07_ms": 95.8957,
+      "v08_ms": 84.467,
+      "speedup_v07_div_v08": 1.1353
+    }
+  ],
+  "github_repository_pins_verified_but_not_measured": {
+    "psf/requests": "3c7baaa05ab4aa49cc819ce3a819d260de19c157",
+    "pallets/flask": "49943b5a94413a530761350f04e896f76e8d620e",
+    "astral-sh/uv": "7bf2d9a3ae44f53a19eed9dcc2348492c8f9f2be"
+  },
+  "external_remote_attempt": "BLOCKED: container DNS cannot resolve github.com",
+  "native_external_cli_matrix": "HOLD",
+  "native_external_cli_cells_missing": 9,
+  "native_chromium_matrix": "HOLD",
+  "native_chromium_platforms_missing": [
+    "Darwin",
+    "Windows"
+  ],
+  "license_and_publication": "HOLD",
+  "general_speedup_across_all_possible_repositories": "NOT PROVABLE BY FINITE SAMPLES"
+}

@@ -1,0 +1,15 @@
+{
+  "package": "REPO ORBIT v0.8.0 native CircleCI R4 candidate",
+  "local_python_regression": "95/95 PASS",
+  "circleci_yaml": "STRUCTURAL_PARSE_PASS",
+  "synthetic_local_full_history_git_fixture": "PASS (1000 commits)",
+  "remote_circleci_linux": "NOT_RUN",
+  "remote_circleci_windows": "NOT_RUN",
+  "remote_circleci_macos": "NOT_RUN",
+  "native_performance_matrix": "HOLD",
+  "browser_cross_platform": "HOLD",
+  "production_core_modified": false,
+  "viewer_modified": false,
+  "github_published": false,
+  "notes": "Python tests ran on Linux; CircleCI config not executed by CircleCI. Full history fixture tests do not substitute for independent real repository measurements."
+}

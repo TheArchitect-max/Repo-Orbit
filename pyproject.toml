@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "repoorbit"
+version = "0.8.0"
+description = "Turn Git history into a living, standalone HTML code universe"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{name = "The Architect"}]
+keywords = ["git", "developer-tools", "visualization", "offline", "history"]
+classifiers = ["Programming Language :: Python :: 3", "Environment :: Console", "Topic :: Software Development :: Version Control :: Git"]
+
+[project.scripts]
+repoorbit = "repoorbit.__main__:main"
+
+[tool.setuptools]
+license-files = [] # The owner has not yet approved the proposed MIT grant.
+packages = ["repoorbit"]
+
+[tool.setuptools.package-data]
+repoorbit = ["viewer.html", "viewer.js"]
+# Include local-first browser runtime in the distributable wheel.
