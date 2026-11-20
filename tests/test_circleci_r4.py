@@ -47,6 +47,16 @@ class CircleCIValidationTests(unittest.TestCase):
             self.assertIn(s,data)
         self.assertNotIn('deploy:',data)
 
+    def test_public_https_checkout_is_pinned_and_requires_no_ssh_key(self):
+        config = (ROOT / '.circleci' / 'config.yml').read_text()
+        self.assertNotIn('      - checkout', config)
+        url = 'https://github.com/TheArchitect-max/Repo-Orbit.git'
+        self.assertEqual(config.count('git clone --quiet --no-checkout ' + url), 3)
+        self.assertEqual(config.count('git -c advice.detachedHead=false checkout --quiet --detach'), 3)
+        self.assertEqual(config.count('HOLD: missing CIRCLE_SHA1'), 3)
+        self.assertEqual(config.count('HOLD: checkout SHA mismatch'), 3)
+        self.assertNotIn('git@github.com:', config)
+
     def test_local_git_full_history_preparation(self):
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
