@@ -1,4 +1,4 @@
-"""Independently audit three R8 native Chromium ZIPs from one Git commit.
+"""Independently audit three R9 native Chromium and performance ZIPs from one Git commit.
 
 No browser or external dependencies are needed to audit. Refuses incomplete,
 corrupt, inconsistent, or fabricated PASS claims and preserves HOLD status.
@@ -17,12 +17,14 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts.audit_native_matrix import audit_browser
 from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
+from scripts.benchmark_viewer_r9 import validate_performance
 
 OS_SET = {'Linux', 'Windows', 'Darwin'}
 BROWSER_HASHES = ROOT/'validation'/'BROWSER_EXPECTED_SHA256.json'
 PINS = ROOT/'validation'/'PINNED_TARGETS.json'
 REQUIRED = {
     'BROWSER_STAGE_STATUS.json', 'BROWSER_PLATFORM_AUDIT.json',
+    'R9_PAIRED_VIEWER_PERFORMANCE.json',
     'CI_CONTEXT.json', 'SHA256_MANIFEST.json', 'SOURCE_SHA256.json',
     'FIXTURE_PROVENANCE.json', 'FIXTURE_BUILD.json', 'BROWSER_NATIVE.json',
     'GENERATED/demo/RepoOrbit_Demo.html',
@@ -34,6 +36,8 @@ REQUIRED = {
     'SOURCE_SNAPSHOT/requirements-browser-ci.txt',
     'SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json',
     'SOURCE_SNAPSHOT/scripts/browser_payload_integrity.py',
+    'SOURCE_SNAPSHOT/baselines/v0.8.0/repoorbit/viewer.js',
+    'SOURCE_SNAPSHOT/validation/BROWSER_R8_ACCEPTED_SHA256.json',
 }
 
 
@@ -77,7 +81,7 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
             raise ValueError('CircleCI commit identity mismatch')
         if context.get('playwright_version') != '1.65.2':
             raise ValueError('Playwright was not pinned')
-        if stage.get('status') != 'BROWSER_EXECUTED_PENDING_AUDIT' or {s['stage'] for s in stage.get('stages',[]) if s['status']=='PASS'} != {'preflight','small_demo_fixture','combined_maximum_fixture','chromium_e2e'}:
+        if stage.get('status') != 'BROWSER_EXECUTED_PENDING_AUDIT' or {s['stage'] for s in stage.get('stages',[]) if s['status']=='PASS'} != {'preflight','small_demo_fixture','combined_maximum_fixture','chromium_e2e','r9_paired_viewer_performance'}:
             raise ValueError('Missing successful E2E stages')
         if audit.get('status') != 'PASS_WITHIN_PREDECLARED_SCOPE':
             raise ValueError('Native browser host audit not accepted')
@@ -87,6 +91,13 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
             for component,digest in parts.items():
                 if sources['reference_source_sha256'][version+'/'+component+'.py']['actual'] != digest:
                     raise ValueError('Pinned code SHA-256 mismatch')
+        perf = obj('R9_PAIRED_VIEWER_PERFORMANCE.json')
+        candidate_sha = sha_bytes(z.read('SOURCE_SNAPSHOT/repoorbit/viewer.js'))
+        problems=validate_performance(perf,candidate_sha)
+        if problems:
+            raise ValueError('Independent R9 paired rendering gate failed: '+repr(problems))
+        if sha_bytes(z.read('SOURCE_SNAPSHOT/baselines/v0.8.0/repoorbit/viewer.js')) != perf['baseline_viewer_sha256']:
+            raise ValueError('R8 immutable viewer source snapshot mismatch')
         if fixtures.get('status') != 'PASS' or not fixtures.get('git_fixture_head'):
             raise ValueError('Missing real Git fixture proof')
         for rel, digest in expected.items():
@@ -151,7 +162,7 @@ def audit(paths: list[Path]) -> dict:
 def main() -> int:
     p=argparse.ArgumentParser(description=__doc__)
     p.add_argument('zips',type=Path,nargs=3)
-    p.add_argument('--out',type=Path,default=ROOT/'external-results'/'R8_BROWSER_MATRIX_AUDIT.json')
+    p.add_argument('--out',type=Path,default=ROOT/'external-results'/'R9_BROWSER_MATRIX_AUDIT.json')
     args=p.parse_args()
     result=audit(args.zips)
     args.out.parent.mkdir(parents=True,exist_ok=True)

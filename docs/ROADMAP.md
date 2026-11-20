@@ -14,3 +14,7 @@
 - **Future, not implemented:** independent Windows/macOS/Firefox/WebKit/browser accessibility testing, larger real-world workload evaluation, public license decision, more efficient sparse redraw on pan/zoom, independent vulnerability review.
 
 - **v0.7.0 completed locally:** bare mirrors/linked worktree handling, early bounded Git stdout, keyboard-search results, XML 1.0-invalid filename replacement in SVG, 70/70 Python regression checks, Chromium browser acceptance, canonical JSON parity check. Does not raise established maximum Git limits.
+
+## R9 — High-impact viewer performance optimization (new candidate; native HOLD)
+
+R7 and R8 are interim engineering acceptance, not the product endpoint. R9 replaces repeated per-frame hover spatial indexing and density hash maps with a lazy layout-space index and typed-array viewport counters, respectively. Preserve exact Git object and A/B semantics; require pixel-identical Canvas output against immutable R8 viewer. **Predeclared native target: ≥3.0x median faster draws in BOTH constellation and atlas modes on the 8,000/80,000/900,000 synthetic fixture, 21 paired measurements per platform/mode, independently audited R9 evidence ZIPs on Linux, Windows and macOS.** No increase to logical ceilings until separate capacity research proves an actual advance. See `docs/R9_MULTIPLICATIVE_SCALING.md`.

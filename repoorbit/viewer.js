@@ -76,7 +76,25 @@ let pinFrame = null, pinSnapshot = null, comparison = null;
 let playing = false, speedIdx = 0, lastFrameTime = 0, motion = 0, showGrowth = true;
 const speeds = [1, 4, 16, 64, 256];
 let width = 1, height = 1, dpr = 1, coords = [], paintQueued = false, pulse = 0;
-let pointBuckets = new Map(), mouse = null, pointerDown = null;
+// The spatial search index depends on static layout, not the current Git frame.
+// Build it at the first pointer query and reuse it across all frame changes.
+// Pointer queries invert zoom/pan, so the index needs rebuilding only on resize.
+const spatialCell = 26;
+let spatialIndexes = {orbit:null, atlas:null}, pointerDown = null;
+let densityScratch = null;
+function spatialIndex(view) {
+  if (spatialIndexes[view]) return spatialIndexes[view];
+  const bins = new Map();
+  for (let id=0; id<coords.length; id++) {
+    const p = coords[id][view];
+    const key = `${Math.floor(p.x/spatialCell)},${Math.floor(p.y/spatialCell)}`;
+    let members = bins.get(key);
+    if (!members) { members=[]; bins.set(key,members); }
+    members.push(id);
+  }
+  spatialIndexes[view]=bins;
+  return bins;
+}
 const nf = n => Number(n).toLocaleString('en-US');
 const date = d => {if(!d)return 'Date redacted';const x=new Date(d);return Number.isNaN(+x) ? String(d).slice(0,10) : x.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
 const titleFrame = i => i < 0 ? 'Baseline' : `Commit ${i+1}`;
@@ -250,6 +268,8 @@ function resize() {
     return {orbit:orbitPoint,atlas:gridPoint};
   });
   resize.groupPositions=groupPositions;
+  spatialIndexes = {orbit:null, atlas:null};
+  densityScratch = null;
   const bar=activity.getBoundingClientRect();activity.width=Math.round(bar.width*dpr);activity.height=Math.round(bar.height*dpr);
   act.setTransform(dpr,0,0,dpr,0,0);
   drawActivity();schedule();
@@ -305,34 +325,41 @@ function draw(t) {
     ctx.strokeStyle='#172f3c';ctx.lineWidth=.7;
     for(let x=40;x<width;x+=44){ctx.beginPath();ctx.moveTo(x,43);ctx.lineTo(x,height-38);ctx.stroke();}
   }
-  pointBuckets=new Map();
-  const bucketSize=26;
-  const bucketAdd=(x,y,id)=>{
-    const k=`${Math.floor(x/bucketSize)},${Math.floor(y/bucketSize)}`;
-    if(!pointBuckets.has(k))pointBuckets.set(k,[]);
-    pointBuckets.get(k).push([x,y,id]);
-  };
   // High-density mode avoids tens of thousands of Canvas arc+fill operations.
   // Underlying exact point coordinates and hover/inspection remain available.
   const densityMode=files.length>12000 && zoom<=1.8 && !query && !filterGroup;
-  const bins=densityMode?new Map():null;
+  let bins=null;
+  if (densityMode) {
+    // Screen-space density aggregation uses compact flat counters rather than
+    // 80,000 string-key Map lookups and short-lived per-pixel objects.
+    const cols=Math.ceil(width/5)+8, rows=Math.ceil(height/5)+8;
+    if(!densityScratch || densityScratch.cols!==cols || densityScratch.rows!==rows){
+      const cells=cols*rows;
+      densityScratch={cols,rows,code:new Uint32Array(cells),docs:new Uint32Array(cells),
+        asset:new Uint32Array(cells),delta:new Uint8Array(cells),touched:[]};
+    }
+    bins=densityScratch;
+    for(const index of bins.touched){
+      bins.code[index]=bins.docs[index]=bins.asset[index]=0;
+      bins.delta[index]=0;
+    }
+    bins.touched.length=0;
+  }
   let filtered=0;
   for(let i=0;i<files.length;i++){
     const exist=active[i], difference=comparison&&comparison.get(i);
     if(!exist && difference!=='D')continue;
-    if(!visible(i))continue;
-    const point=project(coords[i][mode]);
-    if(point.x<-15||point.x>width+15||point.y<-15||point.y>height+15)continue;
+    if((query || filterGroup) && !visible(i))continue;
+    const src=coords[i][mode];
+    const x=cx+(src.x-cx)*zoom+panX, y=cy+(src.y-cy)*zoom+panY;
+    if(x<-15||x>width+15||y<-15||y>height+15)continue;
     filtered++;
-    bucketAdd(point.x,point.y,i);
     if(densityMode) {
-      const cellSize=5;
-      const bx=Math.floor(point.x/cellSize),by=Math.floor(point.y/cellSize);
-      const key=`${bx},${by}`;
-      let bin=bins.get(key);
-      if(!bin){bin={x:bx*cellSize,y:by*cellSize,code:0,docs:0,asset:0,delta:null};bins.set(key,bin);}
-      bin[fileKinds[i]]++;
-      if(difference==='D'||(difference==='M'&&bin.delta!=='D')||(!bin.delta&&difference==='A'))bin.delta=difference;
+      const cell=(Math.floor(y/5)+4)*bins.cols+(Math.floor(x/5)+4);
+      if(!bins.code[cell]&&!bins.docs[cell]&&!bins.asset[cell])bins.touched.push(cell);
+      bins[fileKinds[i]][cell]++;
+      const priority=difference==='D'?3:difference==='M'?2:difference==='A'?1:0;
+      if(priority>bins.delta[cell])bins.delta[cell]=priority;
       continue;
     }
     let color=categories[fileKinds[i]],radius=1.9;
@@ -341,26 +368,28 @@ function draw(t) {
     if(difference==='M'){color='#70cfff';radius=3.1;}
     if(hot.has(i))radius=3.2;
     ctx.globalAlpha=difference==='D'?.8:.87;
-    ctx.fillStyle=color;ctx.beginPath();ctx.arc(point.x,point.y,radius,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,radius,0,Math.PI*2);ctx.fill();
     if(hot.has(i)||difference==='D'){
       ctx.strokeStyle=hot.get(i)==='D'||difference==='D'?'#ff8aa9':'#89ffd8';
       ctx.globalAlpha=.40+pulse*.46;ctx.lineWidth=1;
-      ctx.beginPath();ctx.arc(point.x,point.y,radius+4+pulse*4,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,radius+4+pulse*4,0,Math.PI*2);ctx.stroke();
     }
     if(selected===i||hovered===i){
       ctx.globalAlpha=1;ctx.strokeStyle=selected===i?'#fff':'#7ce8ff';ctx.lineWidth=1.5;
-      ctx.beginPath();ctx.arc(point.x,point.y,9,0,Math.PI*2);ctx.stroke();
+      ctx.beginPath();ctx.arc(x,y,9,0,Math.PI*2);ctx.stroke();
     }
   }
   if(densityMode){
     ctx.globalAlpha=.93;
-    for(const bin of bins.values()){
-      ctx.fillStyle=bin.delta==='D'?'#ff8aa9':bin.delta==='M'?'#70cfff':
-        bin.docs>bin.code&&bin.docs>=bin.asset?categories.docs:
-        bin.asset>bin.code&&bin.asset>bin.docs?categories.asset:categories.code;
-      const count=bin.code+bin.docs+bin.asset;
+    for(const cell of bins.touched){
+      const code=bins.code[cell],docs=bins.docs[cell],asset=bins.asset[cell];
+      ctx.fillStyle=bins.delta[cell]===3?'#ff8aa9':bins.delta[cell]===2?'#70cfff':
+        docs>code&&docs>=asset?categories.docs:
+        asset>code&&asset>docs?categories.asset:categories.code;
+      const count=code+docs+asset;
       const side=Math.min(5,1.3+Math.log2(count+1));
-      ctx.fillRect(bin.x+(5-side)/2,bin.y+(5-side)/2,side,side);
+      const bx=cell%bins.cols-4,by=Math.floor(cell/bins.cols)-4;
+      ctx.fillRect(bx*5+(5-side)/2,by*5+(5-side)/2,side,side);
     }
     // Prioritize precisely selected/hovered files over density aggregation.
     for(const id of [selected,hovered]){
@@ -385,10 +414,22 @@ function draw(t) {
   if(pulse>.01&&!window.matchMedia('(prefers-reduced-motion: reduce)').matches){pulse*=.89;schedule();}else pulse=0;
 }
 function nearest(mx,my) {
-  let winner=null,min=95;
-  const bx=Math.floor(mx/26),by=Math.floor(my/26);
-  for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++){
-    for(const [x,y,id] of pointBuckets.get(`${bx+dx},${by+dy}`)||[]){
+  const sx=(mx-width*.5-panX)/zoom+width*.5;
+  const sy=(my-height*.5-panY)/zoom+height*.5;
+  const index=spatialIndex(mode);
+  const bx=Math.floor(sx/spatialCell), by=Math.floor(sy/spatialCell);
+  // Pixel hit radius is invariant under zoom. Search the corresponding
+  // untransformed neighborhoods so selection stays exact after pan/zoom.
+  const reach=Math.ceil(Math.sqrt(95)/zoom/spatialCell)+1;
+  let winner=null, min=95;
+  for(let dx=-reach;dx<=reach;dx++)for(let dy=-reach;dy<=reach;dy++){
+    for(const id of index.get(`${bx+dx},${by+dy}`)||[]){
+      if(!active[id] && !(comparison&&comparison.get(id)==='D'))continue;
+      if((query||filterGroup) && !visible(id))continue;
+      const p=coords[id][mode];
+      const x=width*.5+(p.x-width*.5)*zoom+panX;
+      const y=height*.5+(p.y-height*.5)*zoom+panY;
+      if(x<-15||x>width+15||y<-15||y>height+15)continue;
       const r=(x-mx)**2+(y-my)**2;
       if(r<min){min=r;winner=id;}
     }

@@ -1,4 +1,4 @@
-"""R8: native Chromium E2E with complete fail-closed evidence ZIP per OS.
+"""R9: native Chromium E2E and paired renderer benchmark with complete fail-closed evidence ZIP per OS.
 
 Requires Playwright only in the test environment; no application runtime dependency.
 Builds two deterministic synthetic Git-backed browser fixtures from source.
@@ -22,10 +22,11 @@ from scripts.run_ci_evidence import (build_zip, digest, now, provenance,
                                      run_logged, write_json)
 from scripts.audit_native_matrix import audit_browser
 from scripts.browser_payload_integrity import inspect_fixture
+from scripts.benchmark_viewer_r9 import validate_performance, sha_bytes
 
 PLATFORMS = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'macos'}
 PLAYWRIGHT_PIN = '1.65.2'
-STAGES = ('preflight', 'small_demo_fixture', 'combined_maximum_fixture', 'chromium_e2e')
+STAGES = ('preflight', 'small_demo_fixture', 'combined_maximum_fixture', 'chromium_e2e', 'r9_paired_viewer_performance')
 EXPECTED = ROOT / 'validation' / 'BROWSER_EXPECTED_SHA256.json'
 
 
@@ -99,10 +100,12 @@ def run_all(staging: Path, system: str) -> int:
                 '--report', str(staging / 'FIXTURE_BUILD.json')]),
             ('chromium_e2e', [sys.executable, 'scripts/run_native_browser.py',
                 '--out', str(staging / 'BROWSER_NATIVE.json')]),
+            ('r9_paired_viewer_performance', [sys.executable, '-u', 'scripts/benchmark_viewer_r9.py',
+                '--pairs', '21', '--out', str(staging / 'R9_PAIRED_VIEWER_PERFORMANCE.json')]),
         ]
         for i, (name, command) in enumerate(commands, 1):
             logname = f'logs/{i:02d}_{name}.log'
-            print(f'R8 BROWSER: {system}/{name}', flush=True)
+            print(f'R9 BROWSER: {system}/{name}', flush=True)
             rc, elapsed = run_logged(command, ROOT, staging / logname)
             record = {'stage': name, 'status': 'PASS' if rc == 0 else 'FAIL',
                       'returncode': rc, 'elapsed_seconds': elapsed, 'log': logname}
@@ -112,7 +115,7 @@ def run_all(staging: Path, system: str) -> int:
                     record['status'] = 'FAIL'
                     record['returncode'] = rc = 2
                     record['error'] = 'Fixture integrity failed: ' + json.dumps(f, ensure_ascii=True)
-                    print('R8 BROWSER HOLD: ' + record['error'], file=sys.stderr, flush=True)
+                    print('R9 BROWSER HOLD: ' + record['error'], file=sys.stderr, flush=True)
             state['stages'].append(record)
             write_json(staging / 'BROWSER_STAGE_STATUS.json', state)
             if rc:
@@ -126,7 +129,7 @@ def run_all(staging: Path, system: str) -> int:
         state.update(status='FAIL', error=type(exc).__name__ + ': ' + str(exc),
                      finished_utc=now())
         write_json(staging / 'BROWSER_STAGE_STATUS.json', state)
-        print('R8 BROWSER HOLD: ' + str(exc), file=sys.stderr, flush=True)
+        print('R9 BROWSER HOLD: ' + str(exc), file=sys.stderr, flush=True)
         return 2
     finally:
         copy_results(staging)
@@ -141,6 +144,9 @@ def evaluate_platform(staging: Path, system: str) -> dict:
     required = ('CI_CONTEXT.json', 'SOURCE_SHA256.json', 'FIXTURE_PROVENANCE.json',
                 'SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json',
                 'FIXTURE_BUILD.json', 'BROWSER_NATIVE.json',
+                'R9_PAIRED_VIEWER_PERFORMANCE.json',
+                'SOURCE_SNAPSHOT/baselines/v0.8.0/repoorbit/viewer.js',
+                'SOURCE_SNAPSHOT/validation/BROWSER_R8_ACCEPTED_SHA256.json',
                 'GENERATED/demo/RepoOrbit_Demo.html',
                 'GENERATED/demo/RepoOrbit_CombinedMaximum.html',
                 'GENERATED/demo/RepoOrbit_Preview.png',
@@ -184,6 +190,11 @@ def evaluate_platform(staging: Path, system: str) -> dict:
             errors.append({'type': 'v7_browser_assertions_not_pass'})
         if maximum.get('status') != 'PASS' or maximum.get('uncaught_javascript_errors') or maximum.get('console_errors') or not maximum.get('no_external_http_requests'):
             errors.append({'type': 'maximum_browser_assertions_not_pass'})
+        perf = json.loads((staging / 'R9_PAIRED_VIEWER_PERFORMANCE.json').read_text(encoding='utf-8'))
+        candidate_sha = digest(staging/'SOURCE_SNAPSHOT/repoorbit/viewer.js')
+        perf_errors = validate_performance(perf,candidate_sha)
+        if perf_errors:
+            errors.append({'type':'r9_performance_gate_failed','details':perf_errors})
         summary = audit_browser([browser], expected, [system])
         if summary['status'] != 'PASS_WITHIN_PREDECLARED_SCOPE':
             errors.append({'type': 'native_browser_requirements_not_pass',
@@ -191,7 +202,7 @@ def evaluate_platform(staging: Path, system: str) -> dict:
     return {'schema': 1, 'system': system,
             'status': 'PASS_WITHIN_PREDECLARED_SCOPE' if not errors else 'FAIL',
             'errors': errors, 'playwright_pin': PLAYWRIGHT_PIN,
-            'scope': 'Chromium smoke/search/max-size E2E, synthetic real-Git fixtures',
+            'scope': 'Chromium smoke/search/max-size E2E plus R9 21 paired draw performance samples in two modes',
             'other_browser_engines': 'NOT_TESTED',
             'a11y_independent_review': 'HOLD'}
 
@@ -214,16 +225,16 @@ def package(staging: Path, out: Path, system: str) -> int:
                   'errors': [{'type': 'audit_exception', 'message': repr(exc)}]}
     write_json(staging / 'BROWSER_PLATFORM_AUDIT.json', result)
     archive, manifest = build_zip(staging, out, system)
-    renamed = out / archive.name.replace('REPO_ORBIT_R7_', 'REPO_ORBIT_R8_BROWSER_')
+    renamed = out / archive.name.replace('REPO_ORBIT_R7_', 'REPO_ORBIT_R9_BROWSER_')
     archive.rename(renamed)
     (out/(archive.name+'.sha256')).unlink()
     (out/(renamed.name+'.sha256')).write_text(digest(renamed)+'  '+renamed.name+'\n', encoding='utf-8')
     # Rename only the envelope; ZIP manifest still references all internal bytes.
     with zipfile.ZipFile(renamed) as z:
         if z.testzip() is not None or len(z.namelist()) != manifest['archive_entry_count']:
-            raise RuntimeError('R8 browser ZIP integrity failed')
-    print('R8_BROWSER_ZIP:', renamed, 'files:', len(manifest['files']), flush=True)
-    print('R8_BROWSER_PLATFORM_AUDIT:', result['status'], flush=True)
+            raise RuntimeError('R9 browser ZIP integrity failed')
+    print('R9_BROWSER_ZIP:', renamed, 'files:', len(manifest['files']), flush=True)
+    print('R9_BROWSER_PLATFORM_AUDIT:', result['status'], flush=True)
     return 0 if result['status'] == 'PASS_WITHIN_PREDECLARED_SCOPE' else 2
 
 
