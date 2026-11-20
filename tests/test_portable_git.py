@@ -52,6 +52,23 @@ class PortableGitFixtureTests(unittest.TestCase):
             self.assertEqual(data['files_final'], 3)
             self.assertEqual(data['verified_frames'], 2)
 
+    def test_non_utf8_raw_path_is_committed_without_host_files(self):
+        from repoorbit.core import OrbitError
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            subprocess.run(['git', '-C', str(root), 'init', '-q'],
+                           check=True, capture_output=True)
+            raw_name = b'src/invalid-\xff.py'
+            commit_unsafe_paths(root, 'raw-path-regression', {raw_name: 'safe'})
+            names = subprocess.run(
+                ['git', '-C', str(root), 'ls-tree', '-r', '-z', '--name-only', 'HEAD'],
+                check=True, capture_output=True,
+            ).stdout.split(b'\0')
+            self.assertIn(raw_name, names)
+            self.assertFalse((root / 'src').exists())
+            with self.assertRaisesRegex(OrbitError, 'Non-UTF-8'):
+                analyze(root)
+
     def test_nul_name_is_rejected_before_git_input(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

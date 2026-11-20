@@ -122,6 +122,30 @@ The four original v0.7/v0.8 core/render source SHA-256 values are unchanged.
 These are local checks, **not** a native Windows PASS. Keep Windows
 benchmarking and PR merge on HOLD until CircleCI supplies fresh evidence.
 
+## Native macOS R6 — invalid UTF-8 test fixture repair (2026-11-20)
+
+The native macOS CircleCI job on commit `cb48e709e602ee09dfeef2c698d0f52291d43236`
+reported Python 3.13.3, Git 2.49.0, and a successful pinned source
+preflight (11 regression modules). Its unittest stage ran 101 tests and
+ended with **1 ERROR**, no benchmark execution. The only failure was
+`test_non_utf8_filename_rejected_instead_of_corrupted`: APFS refused
+`os.open()` for a filename containing raw `0xff` (`Errno 92: Illegal byte sequence`).
+
+**Remedy:** retain the semantic check for invalid UTF-8 in real Git trees,
+but construct the underlying Git blob/tree objects in the existing test-only
+`tests/portable_git.py` fixture, using a raw `bytes` path key. This fixture
+never materializes an invalid name on APFS, NTFS or another host filesystem.
+The portable regression also verifies the exact byte path exists in
+`git ls-tree -z` and that the production analyzer rejects it as `Non-UTF-8`.
+The former POSIX-only skip is removed; the adversarial check runs on all OSes.
+
+Locally verified on Linux: **102/102 Python tests PASS**, including a
+restricted locale and `PYTHONIOENCODING=cp1252`; pinned v0.7/v0.8
+core/render SHA-256 checks remain 4/4 PASS. These results are **not**
+macOS CircleCI PASS. Re-run only macOS on the repaired branch HEAD and
+inspect the job logs before concluding platform acceptance.
+PR #1 remains DRAFT/HOLD; no merge.
+
 ## Cost-controlled manual execution
 1. Connect this GitHub repository to CircleCI via GitHub App.
 2. In CircleCI Project Settings > Triggers, disable all automatic push/PR triggers.

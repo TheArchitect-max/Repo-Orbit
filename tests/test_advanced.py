@@ -124,12 +124,16 @@ class V2Tests(Repository):
                 analyze(self.repo,verification='full')
         self.assertGreater(calls['count'],0)
 
-    @unittest.skipUnless(os.name=='posix','Raw-byte filenames require POSIX')
     def test_non_utf8_filename_rejected_instead_of_corrupted(self):
-        raw=os.fsencode(str(self.repo))+b'/invalid-\xff.py'
-        fd=os.open(raw,os.O_WRONLY|os.O_CREAT,0o644);os.write(fd,b'pass');os.close(fd)
-        git(self.repo,'add','-A');git(self.repo,'commit','-q','-m','invalid path')
-        with self.assertRaisesRegex(OrbitError,'Non-UTF-8'):analyze(self.repo)
+        # Build actual raw Git objects: APFS and NTFS reject invalid byte names.
+        raw_name = b'invalid-\xff.py'
+        commit_unsafe_paths(self.repo, 'invalid path', {raw_name: 'pass'})
+        paths = subprocess.check_output(
+            ['git', '-C', str(self.repo), 'ls-tree', '-r', '-z', '--name-only', 'HEAD']
+        ).split(b'\0')
+        self.assertIn(raw_name, paths)
+        with self.assertRaisesRegex(OrbitError, 'Non-UTF-8'):
+            analyze(self.repo)
 
     def test_cli_redact_full_verify_and_json(self):
         self.commit('secret message',{'root/alpha.py':'x'})

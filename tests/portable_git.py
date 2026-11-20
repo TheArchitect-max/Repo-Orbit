@@ -61,11 +61,12 @@ def _tree_from_paths(repo: Path, paths: dict[bytes, tuple[bytes, bytes]]) -> str
     return write_tree(root)
 
 
-def commit_unsafe_paths(repo: Path, subject: str, additions: dict[str, str]) -> str:
+def commit_unsafe_paths(repo: Path, subject: str, additions: dict[str | bytes, str]) -> str:
     """Commit test-only unsafe filename objects without checking them out.
 
-    Preserve an existing parent tree and its history when present; valid and
-    unsafe names must appear together in the exact Git tree under test.
+    Preserve the existing parent tree and history. Keys may be raw Git path
+    bytes (including invalid UTF-8), which must never touch the host filesystem.
+    Valid and unsafe names appear together in the exact Git tree under test.
     """
     branch = _git(repo, 'symbolic-ref', 'HEAD').strip().decode('ascii')
     parent = subprocess.run(
@@ -89,7 +90,7 @@ def commit_unsafe_paths(repo: Path, subject: str, additions: dict[str, str]) -> 
             files[filename] = (mode, oid)
 
     for name, contents in additions.items():
-        raw_name = name.encode('utf-8')
+        raw_name = name if isinstance(name, bytes) else name.encode('utf-8')
         if not raw_name or b'\0' in raw_name:
             raise ValueError('Git fixture path must be non-empty and NUL-free')
         if any(part in (b'', b'.', b'..') for part in raw_name.split(b'/')):
@@ -110,6 +111,6 @@ def commit_unsafe_paths(repo: Path, subject: str, additions: dict[str, str]) -> 
 
     result = _git(repo, 'ls-tree', '-r', '-z', '--name-only', 'HEAD').split(b'\0')
     for name in additions:
-        if name.encode('utf-8') not in result:
+        if (name if isinstance(name, bytes) else name.encode('utf-8')) not in result:
             raise AssertionError(f'Injected Git fixture path not present: {name!r}')
     return commit
