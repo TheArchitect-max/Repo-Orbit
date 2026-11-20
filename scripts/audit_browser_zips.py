@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from scripts.audit_native_matrix import audit_browser
+from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
 
 OS_SET = {'Linux', 'Windows', 'Darwin'}
 BROWSER_HASHES = ROOT/'validation'/'BROWSER_EXPECTED_SHA256.json'
@@ -31,6 +32,8 @@ REQUIRED = {
     'GENERATED/evidence/browser_combined_limits.json',
     'SOURCE_SNAPSHOT/scripts/run_browser_evidence.py',
     'SOURCE_SNAPSHOT/requirements-browser-ci.txt',
+    'SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json',
+    'SOURCE_SNAPSHOT/scripts/browser_payload_integrity.py',
 }
 
 
@@ -90,6 +93,16 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
             name = ('GENERATED/' if rel.startswith('demo/') else 'SOURCE_SNAPSHOT/') + rel
             if name not in names or sha_bytes(z.read(name)) != digest:
                 raise ValueError('Browser asset mismatch: '+rel)
+        canonical_pin = expected_reference()
+        if json.loads(z.read('SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json')) != canonical_pin:
+            raise ValueError('Canonical payload reference changed in source snapshot')
+        canonical = inspect_combined_export(z.read('GENERATED/demo/RepoOrbit_CombinedMaximum.html'), canonical_pin)
+        if fixtures.get('combined_canonical_dataset',{}).get('sha256_uncompressed_dataset') != canonical['sha256_uncompressed_dataset']:
+            raise ValueError('Host fixture canonical dataset evidence mismatch')
+        if browser.get('combined_canonical_dataset',{}).get('sha256_uncompressed_dataset') != canonical['sha256_uncompressed_dataset']:
+            raise ValueError('Chromium test canonical dataset evidence mismatch')
+        if fixture_build.get('observed',{}).get('HTML_SHA256') != canonical['sha256_html']:
+            raise ValueError('Combined fixture HTML provenance mismatch')
         for item in sources['git_tracked_files']:
             name = 'SOURCE_SNAPSHOT/' + item['path']
             if name not in names or sha_bytes(z.read(name)) != item['sha256']:

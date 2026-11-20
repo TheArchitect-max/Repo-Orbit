@@ -15,6 +15,40 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class R8BrowserGateTests(unittest.TestCase):
+    def test_combined_fixture_exact_uncompressed_hash_allows_gzip_variation(self):
+        import base64
+        import gzip
+        import re
+        from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
+        source = (ROOT/'demo/RepoOrbit_CombinedMaximum.html').read_bytes()
+        reference = expected_reference()
+        original = inspect_combined_export(source, reference)
+        match = re.search(rb'<script[^>]*id="dataset"[^>]*>([^<]*)</script>', source, re.S)
+        self.assertIsNotNone(match)
+        raw = gzip.decompress(base64.b64decode(match.group(1)))
+        alternate = base64.b64encode(gzip.compress(raw, compresslevel=1, mtime=0))
+        different_html = source[:match.start(1)] + alternate + source[match.end(1):]
+        self.assertNotEqual(hashlib.sha256(source).hexdigest(), hashlib.sha256(different_html).hexdigest())
+        normalized = inspect_combined_export(different_html, reference)
+        self.assertEqual(original['sha256_uncompressed_dataset'], normalized['sha256_uncompressed_dataset'])
+        self.assertEqual(normalized['git_head'], reference['required_dataset_fields']['head'])
+
+    def test_combined_fixture_changed_dataset_rejected_even_with_valid_gzip(self):
+        import base64
+        import gzip
+        import re
+        from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
+        original = (ROOT/'demo/RepoOrbit_CombinedMaximum.html').read_bytes()
+        match = re.search(rb'<script[^>]*id="dataset"[^>]*>([^<]*)</script>', original, re.S)
+        self.assertIsNotNone(match)
+        raw = gzip.decompress(base64.b64decode(match.group(1)))
+        tampered = raw.replace(b'"head":"0bcade52', b'"head":"9bcade52', 1)
+        self.assertNotEqual(raw, tampered)
+        packed = base64.b64encode(gzip.compress(tampered, compresslevel=5, mtime=0))
+        html = original[:match.start(1)] + packed + original[match.end(1):]
+        with self.assertRaisesRegex(ValueError, 'Canonical browser dataset SHA-256 mismatch'):
+            inspect_combined_export(html, expected_reference())
+
     def test_browser_matrix_requires_all_three_native_platforms(self):
         self.assertEqual(audit_bundle([])['status'], 'HOLD_OR_FAIL')
 

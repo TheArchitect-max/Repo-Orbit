@@ -21,6 +21,7 @@ sys.path.insert(0, str(ROOT))
 from scripts.run_ci_evidence import (build_zip, digest, now, provenance,
                                      run_logged, write_json)
 from scripts.audit_native_matrix import audit_browser
+from scripts.browser_payload_integrity import inspect_fixture
 
 PLATFORMS = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'macos'}
 PLAYWRIGHT_PIN = '1.65.2'
@@ -58,6 +59,12 @@ def fixture_provenance(staging: Path) -> dict:
               'assets': checked, 'git_fixture_head': head,
               'git_fixture_is_real_history': head is not None,
               'synthetic_data_only': True}
+    try:
+        result['combined_canonical_dataset'] = inspect_fixture(
+            ROOT / 'demo' / 'RepoOrbit_CombinedMaximum.html')
+    except (OSError, ValueError) as exc:
+        result['status'] = 'FAIL'
+        result['combined_canonical_dataset'] = {'status': 'FAIL', 'error': str(exc)}
     if head is None:
         result['status'] = 'FAIL'
     write_json(staging / 'FIXTURE_PROVENANCE.json', result)
@@ -104,7 +111,8 @@ def run_all(staging: Path, system: str) -> int:
                 if f['status'] != 'PASS':
                     record['status'] = 'FAIL'
                     record['returncode'] = rc = 2
-                    record['error'] = 'Fixture SHA-256 mismatch'
+                    record['error'] = 'Fixture integrity failed: ' + json.dumps(f, ensure_ascii=True)
+                    print('R8 BROWSER HOLD: ' + record['error'], file=sys.stderr, flush=True)
             state['stages'].append(record)
             write_json(staging / 'BROWSER_STAGE_STATUS.json', state)
             if rc:
@@ -131,6 +139,7 @@ def evaluate_platform(staging: Path, system: str) -> dict:
     if status.get('status') != 'BROWSER_EXECUTED_PENDING_AUDIT' or observed != set(STAGES):
         errors.append({'type': 'missing_successful_stages', 'have': sorted(observed)})
     required = ('CI_CONTEXT.json', 'SOURCE_SHA256.json', 'FIXTURE_PROVENANCE.json',
+                'SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json',
                 'FIXTURE_BUILD.json', 'BROWSER_NATIVE.json',
                 'GENERATED/demo/RepoOrbit_Demo.html',
                 'GENERATED/demo/RepoOrbit_CombinedMaximum.html',
@@ -153,8 +162,14 @@ def evaluate_platform(staging: Path, system: str) -> dict:
             errors.append({'type': 'native_host_or_playwright_mismatch'})
         if not all(v['match'] for v in source['reference_source_sha256'].values()):
             errors.append({'type': 'source_integrity_mismatch'})
-        if assets.get('status') != 'PASS' or not assets.get('git_fixture_head'):
+        if assets.get('status') != 'PASS' or not assets.get('git_fixture_head') or assets.get('combined_canonical_dataset',{}).get('status') != 'PASS':
             errors.append({'type': 'fixture_provenance_failed'})
+        try:
+            canonical = inspect_fixture(staging/'GENERATED/demo/RepoOrbit_CombinedMaximum.html')
+            if canonical['sha256_uncompressed_dataset'] != assets['combined_canonical_dataset']['sha256_uncompressed_dataset']:
+                errors.append({'type': 'different_runtime_and_archived_browser_dataset'})
+        except (OSError, ValueError, KeyError) as exc:
+            errors.append({'type': 'combined_canonical_dataset_not_verified', 'error': str(exc)})
         for relative, refhash in expected.items():
             rel = 'GENERATED/' + relative if relative.startswith('demo/') else 'SOURCE_SNAPSHOT/' + relative
             if not (staging / rel).is_file() or digest(staging / rel) != refhash:

@@ -314,3 +314,46 @@ Config Source Branch and Checkout Source Branch both
 **HOLD until new CircleCI evidence**. Previously accepted R7 native CLI
 matrix is not invalidated by this Windows installer-only change.
 
+
+## R8 Windows fixture compression identity — canonical dataset control (2026-11-20)
+
+The next Windows browser CircleCI run on `e1bbb5a9846283b3bbc5461a4c27978774c8f219`
+passed the pinned source preflight (13 regression modules), built the
+32-commit small fixture and completed the full 8,000-commit / 80,000-path /
+900,000-event Git fixture with `PYTHON_GATE_PASS`. The job then returned
+exit 2 before Chromium E2E. Evidence: `build_19_step_103_container_0.txt`.
+
+The generated Windows maximum HTML was 3,431,641 bytes (SHA-256
+`e1fec36c5e3f56f374077cf85ecc0b8588ab788487d1dd1372add747e351da1e`),
+whereas the pinned Linux gzip-container HTML was 3,005,237 bytes (SHA-256
+`5917969cf3feb1ff3dea95541c22b63851d6efe1c32e18099d4b8701f0077f24`).
+Both Git fixtures reported the exact same `HEAD`:
+`0bcade52f3f2f24376aeea87b1716248b537e444`. The most likely cause is
+platform-dependent gzip/zlib compression output, but the Windows canonical
+uncompressed payload must still be verified in the next native job.
+
+**Remediation:** The large synthetic HTML is now validated against a
+cryptographic SHA-256 of its exact *decompressed UTF-8 browser dataset*:
+`1de6f6fbe504db5bacdb1e1be1b178404b969f1cd3ef3dacf24d7f310f25bf63`.
+The pinned manifest `validation/BROWSER_CANONICAL_PAYLOAD.json` also requires
+the exact synthetic Git HEAD, 8,000 history frames, 80,000 paths, 900,000
+changes, 3 verified snapshots, packed-schema identity, and the existing
+32 MiB HTML cap. The small demo and immutable viewer sources retain strict
+byte-for-byte SHA-256 acceptance. The historical Linux compressed HTML hash
+is preserved as a reference only, not a cross-platform compression oracle.
+
+The native runner, per-host evidence and independent three-ZIP auditor all
+enforce the same exact uncompressed dataset pin. Unit tests show different
+gzip compression levels with identical payload PASS, while modified Git
+data FAIL even after valid recompression. More explicit HOLD diagnostics
+are emitted on fixture failure.
+
+**Local evidence:** 115/115 Python tests PASS; Linux Chromium smoke, V7
+and maximum browser checks PASS; all 4 original pinned engine/reference
+hashes PASS. This is NOT a native Windows PASS. Run only the Windows browser
+job on the new branch SHA. If its canonical payload differs, retain HOLD
+and investigate the new report instead of changing the reference hash.
+
+Preserve R7 native CLI PASS on its previously evidenced SHA. PR #1 remains
+Draft/HOLD; no merge and no MIT publication until remaining gates accepted.
+
