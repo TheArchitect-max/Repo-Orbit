@@ -29,6 +29,7 @@ jobs:
             python --version
             python -c "import sys; assert sys.version_info >= (3, 10), sys.version"
             git --version
+            python scripts/preflight_circleci.py
             python -m unittest discover -s tests -p 'test_*.py'
       - run:
           name: Pinned full-history Requests, Flask and uv performance benchmarks
@@ -50,6 +51,7 @@ jobs:
             python --version
             python -c "import sys; assert sys.version_info >= (3, 10), sys.version"
             git --version
+            python scripts/preflight_circleci.py
             python -m unittest discover -s tests -p 'test_*.py'
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - run:
@@ -75,6 +77,7 @@ jobs:
             python3 --version
             python3 -c "import sys; assert sys.version_info >= (3, 10), sys.version"
             git --version
+            python3 scripts/preflight_circleci.py
             python3 -m unittest discover -s tests -p 'test_*.py'
       - run:
           name: Pinned full-history Requests, Flask and uv performance benchmarks
