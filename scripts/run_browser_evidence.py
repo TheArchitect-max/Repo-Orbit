@@ -24,10 +24,11 @@ from scripts.audit_native_matrix import audit_browser
 from scripts.browser_payload_integrity import inspect_fixture
 from scripts.benchmark_viewer_r9 import validate_performance, sha_bytes
 from scripts.r9_raster_evidence import inspect_png_artifacts
+from scripts.benchmark_r9_filter_candidates import validate_filter_benchmark, OLD_SHA as ACCEPTED_R9_SHA
 
 PLATFORMS = {'Linux': 'linux', 'Windows': 'windows', 'Darwin': 'macos'}
 PLAYWRIGHT_PIN = '1.65.2'
-STAGES = ('preflight', 'small_demo_fixture', 'combined_maximum_fixture', 'chromium_e2e', 'r9_paired_viewer_performance')
+STAGES = ('preflight', 'small_demo_fixture', 'combined_maximum_fixture', 'chromium_e2e', 'r9_paired_viewer_performance', 'r9_filter_factor_performance')
 EXPECTED = ROOT / 'validation' / 'BROWSER_EXPECTED_SHA256.json'
 
 
@@ -103,6 +104,8 @@ def run_all(staging: Path, system: str) -> int:
                 '--out', str(staging / 'BROWSER_NATIVE.json')]),
             ('r9_paired_viewer_performance', [sys.executable, '-u', 'scripts/benchmark_viewer_r9.py',
                 '--pairs', '21', '--out', str(staging / 'R9_PAIRED_VIEWER_PERFORMANCE.json')]),
+            ('r9_filter_factor_performance', [sys.executable, '-u', 'scripts/benchmark_r9_filter_candidates.py',
+                '--pairs', '21', '--out', str(staging / 'R9_FILTER_PAIRED_DRAW.json')]),
         ]
         for i, (name, command) in enumerate(commands, 1):
             logname = f'logs/{i:02d}_{name}.log'
@@ -146,6 +149,9 @@ def evaluate_platform(staging: Path, system: str) -> dict:
                 'SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json',
                 'FIXTURE_BUILD.json', 'BROWSER_NATIVE.json',
                 'R9_PAIRED_VIEWER_PERFORMANCE.json',
+                'R9_FILTER_PAIRED_DRAW.json',
+                'SOURCE_SNAPSHOT/scripts/benchmark_r9_filter_candidates.py',
+                'SOURCE_SNAPSHOT/baselines/r9-native-accepted/repoorbit/viewer.js',
                 'SOURCE_SNAPSHOT/baselines/v0.8.0/repoorbit/viewer.js',
                 'SOURCE_SNAPSHOT/validation/BROWSER_R8_ACCEPTED_SHA256.json',
                 'GENERATED/demo/RepoOrbit_Demo.html',
@@ -199,6 +205,14 @@ def evaluate_platform(staging: Path, system: str) -> dict:
         png_errors = inspect_png_artifacts(perf, lambda path:(staging/path).read_bytes())
         if png_errors:
             errors.append({'type':'r9_png_artifacts_failed','details':png_errors})
+        filter_report = json.loads((staging / 'R9_FILTER_PAIRED_DRAW.json').read_text(encoding='utf-8'))
+        filter_errors = validate_filter_benchmark(filter_report, candidate_sha,
+            lambda path: (staging / path).read_bytes())
+        if filter_report.get('acceptance') != 'PASS_WITHIN_SCOPE' or filter_errors:
+            errors.append({'type':'r9_filter_factor_gate_failed','details':filter_errors,
+                'reported_status':filter_report.get('acceptance')})
+        if digest(staging/'SOURCE_SNAPSHOT/baselines/r9-native-accepted/repoorbit/viewer.js') != ACCEPTED_R9_SHA:
+            errors.append({'type':'accepted_r9_baseline_mismatch'})
         summary = audit_browser([browser], expected, [system])
         if summary['status'] != 'PASS_WITHIN_PREDECLARED_SCOPE':
             errors.append({'type': 'native_browser_requirements_not_pass',
@@ -206,7 +220,7 @@ def evaluate_platform(staging: Path, system: str) -> dict:
     return {'schema': 1, 'system': system,
             'status': 'PASS_WITHIN_PREDECLARED_SCOPE' if not errors else 'FAIL',
             'errors': errors, 'playwright_pin': PLAYWRIGHT_PIN,
-            'scope': 'Chromium smoke/search/max-size E2E plus R9 21 paired draw performance samples in two modes',
+            'scope': 'Chromium E2E + R8/R9 Canvas draw + R9 filter factor six-context benchmark, 21 paired batches per context',
             'other_browser_engines': 'NOT_TESTED',
             'a11y_independent_review': 'HOLD'}
 

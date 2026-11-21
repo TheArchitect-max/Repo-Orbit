@@ -19,6 +19,7 @@ from scripts.audit_native_matrix import audit_browser
 from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
 from scripts.benchmark_viewer_r9 import validate_performance
 from scripts.r9_raster_evidence import inspect_png_artifacts
+from scripts.benchmark_r9_filter_candidates import validate_filter_benchmark, OLD_SHA as ACCEPTED_R9_SHA
 
 OS_SET = {'Linux', 'Windows', 'Darwin'}
 BROWSER_HASHES = ROOT/'validation'/'BROWSER_EXPECTED_SHA256.json'
@@ -26,6 +27,9 @@ PINS = ROOT/'validation'/'PINNED_TARGETS.json'
 REQUIRED = {
     'BROWSER_STAGE_STATUS.json', 'BROWSER_PLATFORM_AUDIT.json',
     'R9_PAIRED_VIEWER_PERFORMANCE.json',
+    'R9_FILTER_PAIRED_DRAW.json',
+    'SOURCE_SNAPSHOT/scripts/benchmark_r9_filter_candidates.py',
+    'SOURCE_SNAPSHOT/baselines/r9-native-accepted/repoorbit/viewer.js',
     'CI_CONTEXT.json', 'SHA256_MANIFEST.json', 'SOURCE_SHA256.json',
     'FIXTURE_PROVENANCE.json', 'FIXTURE_BUILD.json', 'BROWSER_NATIVE.json',
     'GENERATED/demo/RepoOrbit_Demo.html',
@@ -82,7 +86,7 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
             raise ValueError('CircleCI commit identity mismatch')
         if context.get('playwright_version') != '1.65.2':
             raise ValueError('Playwright was not pinned')
-        if stage.get('status') != 'BROWSER_EXECUTED_PENDING_AUDIT' or {s['stage'] for s in stage.get('stages',[]) if s['status']=='PASS'} != {'preflight','small_demo_fixture','combined_maximum_fixture','chromium_e2e','r9_paired_viewer_performance'}:
+        if stage.get('status') != 'BROWSER_EXECUTED_PENDING_AUDIT' or {s['stage'] for s in stage.get('stages',[]) if s['status']=='PASS'} != {'preflight','small_demo_fixture','combined_maximum_fixture','chromium_e2e','r9_paired_viewer_performance','r9_filter_factor_performance'}:
             raise ValueError('Missing successful E2E stages')
         if audit.get('status') != 'PASS_WITHIN_PREDECLARED_SCOPE':
             raise ValueError('Native browser host audit not accepted')
@@ -100,6 +104,12 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
         pixel_problems = inspect_png_artifacts(perf, z.read)
         if pixel_problems:
             raise ValueError('Independent R9 archived pixel evidence failed: '+repr(pixel_problems))
+        filter_report = obj('R9_FILTER_PAIRED_DRAW.json')
+        filter_problems = validate_filter_benchmark(filter_report, candidate_sha, z.read)
+        if filter_report.get('acceptance') != 'PASS_WITHIN_SCOPE' or filter_problems:
+            raise ValueError('Independent R9 factorized-filter gate failed: '+repr(filter_problems))
+        if sha_bytes(z.read('SOURCE_SNAPSHOT/baselines/r9-native-accepted/repoorbit/viewer.js')) != ACCEPTED_R9_SHA:
+            raise ValueError('Accepted R9 filter reference source mismatch')
         if sha_bytes(z.read('SOURCE_SNAPSHOT/baselines/v0.8.0/repoorbit/viewer.js')) != perf['baseline_viewer_sha256']:
             raise ValueError('R8 immutable viewer source snapshot mismatch')
         if fixtures.get('status') != 'PASS' or not fixtures.get('git_fixture_head'):
