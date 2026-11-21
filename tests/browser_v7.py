@@ -24,6 +24,19 @@ def main():
         page.on('request',lambda r:report['network_requests'].append(r.url) if r.url.startswith(('http://','https://')) else None)
         page.set_content((ROOT/'demo/RepoOrbit_Demo.html').read_text(encoding='utf8'),wait_until='domcontentloaded')
         page.wait_for_function("document.querySelector('#statcommits').textContent==='32'",timeout=30000)
+        # Regression: the <label for="viewmode"> used to hide the actual
+        # accessible action and Chrome announced this button only as "View".
+        # Both modes must expose accurate actions, including keyboard toggle.
+        atlas=page.get_by_role('button',name='Switch to atlas view',exact=True)
+        assert atlas.count()==1, page.locator('#viewmode').aria_snapshot()
+        atlas.focus()
+        page.keyboard.press('Enter')
+        constellation=page.get_by_role('button',name='Switch to constellation view',exact=True)
+        assert constellation.count()==1, page.locator('#viewmode').aria_snapshot()
+        page.keyboard.press('Enter')
+        assert page.get_by_role('button',name='Switch to atlas view',exact=True).count()==1
+        assert 'CONSTELLATION' in page.locator('#viewlabel').inner_text()
+        report['cases']['keyboard_view_toggle_accessible_action']='PASS'
         search=page.locator('#search')
         search.fill('core.py')
         assert page.locator('#matchpanel').is_visible()

@@ -43,6 +43,9 @@ if (D.packed === 'path-index-v1') {
   throw new Error('Unsupported REPO ORBIT payload format');
 }
 const $ = id => document.getElementById(id);
+// The visible <label for="viewmode"> names this button only "View" in
+// Chromium's accessibility tree. Override it at initialization with an action.
+$('viewmode').setAttribute('aria-label','Switch to atlas view');
 const orbit = $('orbit'), ctx = orbit.getContext('2d');
 const activity = $('activity'), act = activity.getContext('2d');
 const scrub = $('scrub'), search = $('search'), tooltip = $('hover');
@@ -564,7 +567,17 @@ $('reset').addEventListener('click',()=>{pause();jump(-1);});
 $('speed').addEventListener('click',()=>{speedIdx=(speedIdx+1)%speeds.length;$('speed').textContent=`${speeds[speedIdx]}× speed`;});
 $('growth').addEventListener('click',()=>{showGrowth=!showGrowth;$('growth').classList.toggle('active',showGrowth);$('growth').setAttribute('aria-pressed',String(showGrowth));drawActivity();});
 scrub.addEventListener('input',()=>{pause();jump(Number(scrub.value)-1);});
-$('viewmode').addEventListener('click',()=>{mode=mode==='orbit'?'atlas':'orbit';$('viewmode').textContent=mode==='orbit'?'◈ Atlas view':'◎ Constellation view';$('viewlabel').textContent=mode==='orbit'?'◉ CONSTELLATION / FILE UNIVERSE':'▦ ATLAS / FILE UNIVERSE';resetZoom();});
+$('viewmode').addEventListener('click',()=>{
+  mode=mode==='orbit'?'atlas':'orbit';
+  const toggle=$('viewmode');
+  toggle.textContent=mode==='orbit'?'◈ Atlas view':'◎ Constellation view';
+  // The preceding <label for="viewmode"> otherwise overrides the button's
+  // accessible name with the generic "View". Expose the action for each state.
+  toggle.setAttribute('aria-label',mode==='orbit'?'Switch to atlas view':'Switch to constellation view');
+  toggle.title=mode==='orbit'?'Switch to a grid atlas organized by folder':'Switch to a constellation view';
+  $('viewlabel').textContent=mode==='orbit'?'◉ CONSTELLATION / FILE UNIVERSE':'▦ ATLAS / FILE UNIVERSE';
+  resetZoom();
+});
 $('groupfilter').addEventListener('change',e=>{filterGroup=e.target.value;rebuildVisible();hovered=null;renderMatches();schedule();});
 search.addEventListener('input',e=>{query=e.target.value.toLowerCase().trim();rebuildVisible();hovered=null;tooltip.style.display='none';renderMatches();schedule();});
 $('pinA').addEventListener('click',pinA);
