@@ -72,7 +72,7 @@ class CircleCIValidationTests(unittest.TestCase):
         data = (ROOT/'.circleci'/'config.yml').read_text()
         for field in ['run_linux:', 'run_windows:', 'run_macos:']:
             self.assertIn(field,data)
-        self.assertEqual(data.count('default: false'),6)  # 3 native CLI + 3 browser jobs
+        self.assertEqual(data.count('default: true'),6)  # manual UI auto-prefills 6 jobs
         for s in ['cimg/python:3.13', 'executor: win/default', 'm4pro.medium',
                   'store_artifacts:', '--out external-results/circleci-']:
             self.assertIn(s,data)
@@ -89,8 +89,38 @@ class CircleCIValidationTests(unittest.TestCase):
         self.assertEqual(config.count('git rev-parse HEAD'), 6)
         self.assertNotIn('git clone --quiet --no-checkout https://github.com/', config)
         self.assertNotIn('git@github.com:', config)
-        # Never enable all six native jobs by default: CircleCI credits remain opt-in.
-        self.assertEqual(config.count('default: false'), 6)
+        # Manual UI runs preselect all six; API-only workflow guards prevent
+        # ordinary VCS push/PR events from spending CI credits.
+        self.assertEqual(config.count('default: true'), 6)
+        for name in ('run_linux', 'run_windows', 'run_macos',
+                     'run_browser_linux', 'run_browser_windows', 'run_browser_macos'):
+            guard = f'when: pipeline.event.name == "api" and pipeline.parameters.{name}'
+            self.assertEqual(config.count(guard), 1)
+        self.assertEqual(config.count('when: pipeline.event.name == "api"'), 6)
+
+    def test_manual_prefill_parameters_and_webhook_fail_closed(self):
+        # These assertions check the config contract; CircleCI still must
+        # compile and run this source SHA natively before acceptance.
+        import re
+        data = (ROOT / '.circleci' / 'config.yml').read_text()
+        expected = ('run_linux', 'run_windows', 'run_macos',
+                    'run_browser_linux', 'run_browser_windows', 'run_browser_macos')
+        header = data.split('jobs:', 1)[0]
+        for name in expected:
+            self.assertRegex(header, r'(?m)^  ' + name + r':\n    type: boolean\n    default: true$')
+        workflows = data.split('workflows:', 1)[1]
+        conditions = re.findall(r'(?m)^    when: (.+)$', workflows)
+        self.assertEqual(len(conditions), 6)
+        parsed = []
+        for condition in conditions:
+            match = re.fullmatch(
+                r'pipeline\.event\.name == "([a-z_]+)" and '
+                r'pipeline\.parameters\.(run_[a-z_]+)', condition)
+            self.assertIsNotNone(match)
+            parsed.append(match.groups())
+        self.assertEqual(set(parsed), {('api', name) for name in expected})
+        for event in ('push', 'pull_request', 'schedule', 'custom_webhook'):
+            self.assertTrue(all(source != event for source, _ in parsed))
 
     def test_native_checkout_preserves_exact_lf_source_bytes(self):
         import hashlib

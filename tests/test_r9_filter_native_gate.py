@@ -75,9 +75,10 @@ class R9NativeFilterGateTests(unittest.TestCase):
         rec=r['cases']['atlas/exact']
         rec['raw_ms']['candidate']=[0.0]*21
         self.assertIn('atlas/exact:invalid_raw_candidate',validate_filter_benchmark(r,'c'*64,lambda _:png))
-    def test_browser_configuration_remains_opt_in(self):
+    def test_browser_configuration_is_manual_only_with_prefilled_parameters(self):
         text=(ROOT/'.circleci/config.yml').read_text()
-        self.assertEqual(text.count('default: false'),6)
+        self.assertEqual(text.count('default: true'),6)
+        self.assertEqual(text.count('when: pipeline.event.name == "api"'),6)
         self.assertEqual(text.count('when: always'),6)
 
 if __name__=='__main__':unittest.main()

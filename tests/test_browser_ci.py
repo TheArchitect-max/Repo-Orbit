@@ -103,7 +103,7 @@ class R8BrowserGateTests(unittest.TestCase):
             self.assertEqual(one,two)
             self.assertEqual(one,spec['demo/RepoOrbit_Demo.html'])
 
-    def test_circleci_browser_jobs_are_opt_in_and_always_zip(self):
+    def test_circleci_browser_jobs_are_manual_and_always_zip(self):
         config=(ROOT/'.circleci/config.yml').read_text(encoding='utf-8')
         for platform,label in [('linux','Linux'),('windows','Windows'),('macos','Darwin')]:
             self.assertIn('run_browser_'+platform+':',config)
@@ -111,7 +111,10 @@ class R8BrowserGateTests(unittest.TestCase):
             self.assertIn('scripts/run_browser_evidence.py --platform '+label+' --out external-results/browser-'+platform+' --run', config)
             self.assertIn('scripts/run_browser_evidence.py --platform '+label+' --out external-results/browser-'+platform+' --package-only',config)
         self.assertEqual(config.count('when: always'),6)
-        self.assertEqual(config.count('default: false'),6)
+        self.assertEqual(config.count('default: true'),6)
+        for platform in ('linux','windows','macos'):
+            guard=f'when: pipeline.event.name == "api" and pipeline.parameters.run_browser_{platform}'
+            self.assertEqual(config.count(guard),1)
         self.assertEqual(config.count('      - store_artifacts:'),6)
 
     def test_windows_browser_installer_keeps_stderr_separate_and_fails_on_real_exit_code(self):

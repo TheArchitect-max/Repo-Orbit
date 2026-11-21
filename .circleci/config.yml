@@ -1,29 +1,31 @@
 version: 2.1
 
-# REPO ORBIT — validation only. All jobs opt-in.
-# In CircleCI Project Settings -> Triggers, disable all automatic triggers.
+# REPO ORBIT — validation only. Six workflows preselected for MANUAL runs.
+# CircleCI auto-populates pipeline parameters from this config.
+# API/UI manual events run; push/PR/schedule events select NO workflows.
+# Keep automatic VCS triggers disabled in CircleCI Project Settings too.
 orbs:
   win: circleci/windows@5.0
 
 parameters:
   run_linux:
     type: boolean
-    default: false
+    default: true
   run_windows:
     type: boolean
-    default: false
+    default: true
   run_macos:
     type: boolean
-    default: false
+    default: true
   run_browser_linux:
     type: boolean
-    default: false
+    default: true
   run_browser_windows:
     type: boolean
-    default: false
+    default: true
   run_browser_macos:
     type: boolean
-    default: false
+    default: true
 
 jobs:
   native-linux:
@@ -269,26 +271,26 @@ jobs:
 
 workflows:
   linux-opt-in:
-    when: << pipeline.parameters.run_linux >>
+    when: pipeline.event.name == "api" and pipeline.parameters.run_linux
     jobs:
       - native-linux
   windows-opt-in:
-    when: << pipeline.parameters.run_windows >>
+    when: pipeline.event.name == "api" and pipeline.parameters.run_windows
     jobs:
       - native-windows
   macos-opt-in:
-    when: << pipeline.parameters.run_macos >>
+    when: pipeline.event.name == "api" and pipeline.parameters.run_macos
     jobs:
       - native-macos
   browser-linux-opt-in:
-    when: << pipeline.parameters.run_browser_linux >>
+    when: pipeline.event.name == "api" and pipeline.parameters.run_browser_linux
     jobs:
       - browser-linux
   browser-windows-opt-in:
-    when: << pipeline.parameters.run_browser_windows >>
+    when: pipeline.event.name == "api" and pipeline.parameters.run_browser_windows
     jobs:
       - browser-windows
   browser-macos-opt-in:
-    when: << pipeline.parameters.run_browser_macos >>
+    when: pipeline.event.name == "api" and pipeline.parameters.run_browser_macos
     jobs:
       - browser-macos
