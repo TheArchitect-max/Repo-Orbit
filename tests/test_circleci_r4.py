@@ -78,15 +78,19 @@ class CircleCIValidationTests(unittest.TestCase):
             self.assertIn(s,data)
         self.assertNotIn('deploy:',data)
 
-    def test_public_https_checkout_is_pinned_and_requires_no_ssh_key(self):
+    def test_private_repository_requires_authenticated_and_pinned_checkout(self):
         config = (ROOT / '.circleci' / 'config.yml').read_text()
-        self.assertNotIn('      - checkout', config)
-        url = 'https://github.com/TheArchitect-max/Repo-Orbit.git'
-        self.assertEqual(config.count('git clone --quiet --no-checkout ' + url), 6)
-        self.assertEqual(config.count('git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach'), 6)
+        # CircleCI's built-in checkout uses the project's GitHub App/OAuth access;
+        # anonymous HTTPS cloning of a private repo is not a valid substitute.
+        self.assertEqual(config.count('      - checkout:\n          method: full'), 6)
+        self.assertEqual(config.count('git config --global core.autocrlf false'), 6)
         self.assertEqual(config.count('HOLD: missing CIRCLE_SHA1'), 6)
         self.assertEqual(config.count('HOLD: checkout SHA mismatch'), 6)
+        self.assertEqual(config.count('git rev-parse HEAD'), 6)
+        self.assertNotIn('git clone --quiet --no-checkout https://github.com/', config)
         self.assertNotIn('git@github.com:', config)
+        # Never enable all six native jobs by default: CircleCI credits remain opt-in.
+        self.assertEqual(config.count('default: false'), 6)
 
     def test_native_checkout_preserves_exact_lf_source_bytes(self):
         import hashlib

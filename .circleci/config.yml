@@ -32,12 +32,15 @@ jobs:
     resource_class: medium
     steps:
       - run:
-          name: Fetch exact CircleCI commit via public HTTPS (no SSH key)
+          name: Preserve source LF bytes before authenticated checkout
+          command: git config --global core.autocrlf false
+      - checkout:
+          method: full
+      - run:
+          name: Verify exact authenticated CircleCI commit
           command: |
             set -euo pipefail
             test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
-            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
           name: Native preflight, regression tests and pinned benchmarks with evidence
@@ -57,14 +60,18 @@ jobs:
     executor: win/default
     steps:
       - run:
-          name: Fetch exact CircleCI commit via public HTTPS (no SSH key)
+          name: Preserve source LF bytes before authenticated checkout
+          command: |
+            $ErrorActionPreference = 'Stop'
+            git config --global core.autocrlf false
+            if ($LASTEXITCODE -ne 0) { throw 'HOLD: git core.autocrlf configuration failed' }
+      - checkout:
+          method: full
+      - run:
+          name: Verify exact authenticated CircleCI commit
           command: |
             $ErrorActionPreference = 'Stop'
             if ([string]::IsNullOrWhiteSpace($env:CIRCLE_SHA1)) { throw 'HOLD: missing CIRCLE_SHA1' }
-            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            if ($LASTEXITCODE -ne 0) { throw 'HOLD: HTTPS clone failed' }
-            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach $env:CIRCLE_SHA1
-            if ($LASTEXITCODE -ne 0) { throw 'HOLD: commit checkout failed' }
             $actual = (git rev-parse HEAD).Trim()
             if ($LASTEXITCODE -ne 0 -or $actual -ne $env:CIRCLE_SHA1) { throw 'HOLD: checkout SHA mismatch' }
       - run:
@@ -89,12 +96,15 @@ jobs:
     resource_class: m4pro.medium
     steps:
       - run:
-          name: Fetch exact CircleCI commit via public HTTPS (no SSH key)
+          name: Preserve source LF bytes before authenticated checkout
+          command: git config --global core.autocrlf false
+      - checkout:
+          method: full
+      - run:
+          name: Verify exact authenticated CircleCI commit
           command: |
             set -euo pipefail
             test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
-            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
           name: Native preflight, regression tests and pinned benchmarks with evidence
@@ -116,12 +126,15 @@ jobs:
     resource_class: medium
     steps:
       - run:
-          name: Public HTTPS source checkout pinned to CircleCI SHA
+          name: Preserve source LF bytes before authenticated checkout
+          command: git config --global core.autocrlf false
+      - checkout:
+          method: full
+      - run:
+          name: Verify exact authenticated CircleCI commit
           command: |
             set -euo pipefail
             test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
-            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
           name: Install pinned test-only Playwright and Chromium
@@ -151,15 +164,20 @@ jobs:
     executor: win/default
     steps:
       - run:
-          name: Public HTTPS source checkout pinned to CircleCI SHA
+          name: Preserve source LF bytes before authenticated checkout
+          command: |
+            $ErrorActionPreference = 'Stop'
+            git config --global core.autocrlf false
+            if ($LASTEXITCODE -ne 0) { throw 'HOLD: git core.autocrlf configuration failed' }
+      - checkout:
+          method: full
+      - run:
+          name: Verify exact authenticated CircleCI commit
           command: |
             $ErrorActionPreference = 'Stop'
             if ([string]::IsNullOrWhiteSpace($env:CIRCLE_SHA1)) { throw 'HOLD: missing CIRCLE_SHA1' }
-            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            if ($LASTEXITCODE -ne 0) { throw 'HOLD: HTTPS clone failed' }
-            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach $env:CIRCLE_SHA1
-            if ($LASTEXITCODE -ne 0) { throw 'HOLD: checkout failed' }
-            if ((git rev-parse HEAD).Trim() -ne $env:CIRCLE_SHA1) { throw 'HOLD: checkout SHA mismatch' }
+            $actual = (git rev-parse HEAD).Trim()
+            if ($LASTEXITCODE -ne 0 -or $actual -ne $env:CIRCLE_SHA1) { throw 'HOLD: checkout SHA mismatch' }
       - run:
           name: Install pinned test-only Playwright and Chromium
           no_output_timeout: 20m
@@ -215,12 +233,15 @@ jobs:
     resource_class: m4pro.medium
     steps:
       - run:
-          name: Public HTTPS source checkout pinned to CircleCI SHA
+          name: Preserve source LF bytes before authenticated checkout
+          command: git config --global core.autocrlf false
+      - checkout:
+          method: full
+      - run:
+          name: Verify exact authenticated CircleCI commit
           command: |
             set -euo pipefail
             test -n "${CIRCLE_SHA1:-}" || { echo "HOLD: missing CIRCLE_SHA1"; exit 2; }
-            git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .
-            git -c core.autocrlf=false -c advice.detachedHead=false checkout --quiet --detach "$CIRCLE_SHA1"
             test "$(git rev-parse HEAD)" = "$CIRCLE_SHA1" || { echo "HOLD: checkout SHA mismatch"; exit 2; }
       - run:
           name: Install pinned test-only Playwright and Chromium
