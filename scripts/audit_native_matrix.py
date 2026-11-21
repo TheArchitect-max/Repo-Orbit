@@ -83,7 +83,7 @@ def verify_one(record: dict, target: str, system: str, config: dict) -> tuple[li
 
 
 def audit_browser(records: list[dict], expected: dict, platforms: list[str]) -> dict:
-    required_names={'tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py'}
+    required_names={'tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py','tests/browser_security_limits.py'}
     seen={}
     errors=[]
     for record in records:

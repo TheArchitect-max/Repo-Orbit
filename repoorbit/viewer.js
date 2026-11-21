@@ -7,7 +7,25 @@ if(dataset.dataset.encoding==='gzip-base64'){
   const binary=atob(dataset.textContent.trim());
   const bytes=Uint8Array.from(binary,c=>c.charCodeAt(0));
   const stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-  D=JSON.parse(await new Response(stream).text());
+  // A small compressed payload may inflate into an unbounded browser allocation.
+  // Bound uncompressed data while it streams, before constructing a JSON string.
+  const maxBytes=64*1024*1024, reader=stream.getReader();
+  const decoder=new TextDecoder('utf-8',{fatal:true}), segments=[];
+  let expanded=0;
+  try {
+    while(true) {
+      const {done,value}=await reader.read();
+      if(done)break;
+      expanded+=value.byteLength;
+      if(expanded>maxBytes) {
+        await reader.cancel().catch(()=>{});
+        throw new Error('Compressed dataset exceeds 64 MiB uncompressed safety limit.');
+      }
+      segments.push(decoder.decode(value,{stream:true}));
+    }
+    segments.push(decoder.decode());
+    D=JSON.parse(segments.join(''));
+  } finally {reader.releaseLock();}
 }else{
   D=JSON.parse(dataset.textContent);
 }

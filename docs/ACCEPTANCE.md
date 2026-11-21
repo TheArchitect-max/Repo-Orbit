@@ -1,3 +1,28 @@
+# R9 security hardening candidate — source-bound validation (2026-11-21)
+
+The previous R9 candidate is **ACCEPTED WITHIN PREDECLARED NATIVE SCOPE**
+(**six CircleCI jobs, three operating systems**) only at Git commit
+`158a97cf1d6fdba3d24f2e25d113f4e66261e8bd` and tree
+`990522ebd6f420676fee60fd887f338d9b793e9a`. Both independent matrix
+auditors returned `PASS_WITHIN_PREDECLARED_SCOPE` without errors. The owner
+provided six original evidence archives; no security, AT/accessibility or
+publication clearance is implied by that acceptance.
+
+The current follow-up fixes unbounded gzip expansion in the browser and Python
+evidence validator. It adds genuine adversarial Chromium acceptance,
+updates the expected demo/viewer hashes, and makes the new security report
+mandatory in both the host platform audit and offline three-ZIP auditor.
+The full Git maximum fixture, immutable R8 and native-accepted R9 baselines,
+21-pair performance requirement and 3× filter threshold remain mandatory.
+
+**Current source SHA:** LOCAL validation only; **new native CLI and browser
+matrices HOLD** until six same-SHA original ZIPs and independent auditors PASS.
+Independent security/privacy, assistive technology, third-party licensing/IP
+and explicit owner MIT/publication authorization remain HOLD. No merge,
+public licence grant or release until the required controls PASS.
+
+---
+
 # Native R9 CLI regression fixture independence — follow-up (2026-11-21)
 
 **Observed 3-platform CLI HOLD (same source `9ba5e7817f3586a03f12d94d5a7cca654891091f`):** Linux, Windows and macOS all passed `source_preflight` but each failed exactly two `test_browser_ci` tests with `FileNotFoundError` for `demo/RepoOrbit_CombinedMaximum.html`. That generated 8k/80k/900k HTML is produced inside the separate browser job and is not Git-tracked. The browser jobs were reported PASS; the submitted CLI logs do not themselves prove those browser results.

@@ -37,6 +37,7 @@ REQUIRED = {
     'GENERATED/demo/RepoOrbit_Preview.png',
     'GENERATED/evidence/v07_browser.json',
     'GENERATED/evidence/browser_combined_limits.json',
+    'GENERATED/evidence/browser_security_limits.json',
     'SOURCE_SNAPSHOT/scripts/run_browser_evidence.py',
     'SOURCE_SNAPSHOT/requirements-browser-ci.txt',
     'SOURCE_SNAPSHOT/validation/BROWSER_CANONICAL_PAYLOAD.json',
@@ -78,6 +79,7 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
         browser = obj('BROWSER_NATIVE.json')
         v7 = obj('GENERATED/evidence/v07_browser.json')
         combined = obj('GENERATED/evidence/browser_combined_limits.json')
+        security = obj('GENERATED/evidence/browser_security_limits.json')
         system = context['system']
         commit = context['commit']
         if system not in OS_SET or audit.get('system') != system or manifest.get('platform') != system:
@@ -139,6 +141,17 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
             raise ValueError('v7 browser assertions did not pass')
         if combined.get('status') != 'PASS' or combined.get('uncaught_javascript_errors') or combined.get('console_errors') or not combined.get('no_external_http_requests'):
             raise ValueError('Combined-limit browser assertions did not pass')
+        if (security.get('status') != 'PASS' or
+            security.get('expected_guard_bytes') != 64*1024*1024 or
+            security.get('oversize_expanded_bytes') != 64*1024*1024 + 1 or
+            security.get('network_requests') or
+            security.get('source_sha256') != sha_bytes(z.read('GENERATED/demo/RepoOrbit_Demo.html')) or
+            security.get('browser_version') != browser.get('browser_version') or
+            security.get('cases') != {
+                'normal_synthetic_demo':'PASS',
+                'gzip_expansion_exceeds_64_mib':'PASS',
+                'invalid_utf8_gzip_rejected':'PASS'}):
+            raise ValueError('Independent browser gzip safety evidence not accepted')
         if audit_browser([browser],expected,[system])['status'] != 'PASS_WITHIN_PREDECLARED_SCOPE':
             raise ValueError('Required Chromium E2E cases not proven')
         if len(z.read('GENERATED/demo/RepoOrbit_Preview.png')) < 1000:

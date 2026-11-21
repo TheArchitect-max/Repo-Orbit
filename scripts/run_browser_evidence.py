@@ -38,7 +38,8 @@ def copy_results(staging: Path) -> None:
                      'demo/RepoOrbit_CombinedMaximum.html',
                      'demo/RepoOrbit_Preview.png',
                      'evidence/v07_browser.json',
-                     'evidence/browser_combined_limits.json'):
+                     'evidence/browser_combined_limits.json',
+                     'evidence/browser_security_limits.json'):
         source = ROOT / relative
         if source.is_file():
             destination = staging / 'GENERATED' / relative
@@ -158,7 +159,8 @@ def evaluate_platform(staging: Path, system: str) -> dict:
                 'GENERATED/demo/RepoOrbit_CombinedMaximum.html',
                 'GENERATED/demo/RepoOrbit_Preview.png',
                 'GENERATED/evidence/v07_browser.json',
-                'GENERATED/evidence/browser_combined_limits.json')
+                'GENERATED/evidence/browser_combined_limits.json',
+                'GENERATED/evidence/browser_security_limits.json')
     for name in required:
         if not (staging / name).is_file():
             errors.append({'type': 'missing_browser_evidence', 'path': name})
@@ -170,6 +172,7 @@ def evaluate_platform(staging: Path, system: str) -> dict:
         browser = json.loads((staging / 'BROWSER_NATIVE.json').read_text(encoding='utf-8'))
         v7 = json.loads((staging / 'GENERATED/evidence/v07_browser.json').read_text(encoding='utf-8'))
         maximum = json.loads((staging / 'GENERATED/evidence/browser_combined_limits.json').read_text(encoding='utf-8'))
+        security = json.loads((staging / 'GENERATED/evidence/browser_security_limits.json').read_text(encoding='utf-8'))
         expected = json.loads(EXPECTED.read_text(encoding='utf-8'))
         if context.get('system') != system or context.get('playwright_version') != PLAYWRIGHT_PIN:
             errors.append({'type': 'native_host_or_playwright_mismatch'})
@@ -197,6 +200,16 @@ def evaluate_platform(staging: Path, system: str) -> dict:
             errors.append({'type': 'v7_browser_assertions_not_pass'})
         if maximum.get('status') != 'PASS' or maximum.get('uncaught_javascript_errors') or maximum.get('console_errors') or not maximum.get('no_external_http_requests'):
             errors.append({'type': 'maximum_browser_assertions_not_pass'})
+        if (security.get('status') != 'PASS' or security.get('cases') != {
+            'normal_synthetic_demo':'PASS',
+            'gzip_expansion_exceeds_64_mib':'PASS',
+            'invalid_utf8_gzip_rejected':'PASS'} or
+            security.get('expected_guard_bytes') != 64*1024*1024 or
+            security.get('oversize_expanded_bytes') != 64*1024*1024 + 1 or
+            security.get('network_requests') or
+            security.get('source_sha256') != digest(staging/'GENERATED/demo/RepoOrbit_Demo.html') or
+            security.get('browser_version') != browser.get('browser_version')):
+            errors.append({'type': 'browser_gzip_security_limit_not_proven'})
         perf = json.loads((staging / 'R9_PAIRED_VIEWER_PERFORMANCE.json').read_text(encoding='utf-8'))
         candidate_sha = digest(staging/'SOURCE_SNAPSHOT/repoorbit/viewer.js')
         perf_errors = validate_performance(perf,candidate_sha)

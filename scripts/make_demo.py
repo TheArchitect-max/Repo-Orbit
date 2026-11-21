@@ -20,7 +20,21 @@ _COMMIT_INDEX = 0
 
 def git(repo: Path, *args: str) -> None:
     global _COMMIT_INDEX
-    env = os.environ.copy()
+    # This fixture must reproduce the exact committed HTML independently of
+    # the operator's Colab/Git identity, signing settings or global config.
+    # Inherited GIT_* values override `git config user.*` and can silently
+    # change the SHA of every one of the 32 real synthetic commits.
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith("GIT_")}
+    env.update(
+        GIT_CONFIG_NOSYSTEM="1",
+        GIT_CONFIG_GLOBAL=os.devnull,
+        GIT_DEFAULT_HASH="sha1",
+        GIT_AUTHOR_NAME="Demo Contributor",
+        GIT_AUTHOR_EMAIL="demo@example.invalid",
+        GIT_COMMITTER_NAME="Demo Contributor",
+        GIT_COMMITTER_EMAIL="demo@example.invalid",
+    )
     if args and args[0] == 'commit':
         epoch = str(1700000000 + _COMMIT_INDEX)
         env.update(GIT_AUTHOR_DATE=epoch + ' +0000',
@@ -91,6 +105,15 @@ def build(target: Path) -> None:
             git(repo,"add","-A")
             git(repo,"commit","-q","-m",message)
         data=analyze(repo,limit=len(scenes),share_safe=False)
+        # Git 2.43 serializes %aI's UTC offset as +00:00, while newer Git
+        # releases can serialize the same instant as Z.  The 32-commit sample
+        # has a byte-exact HTML SHA pin, so canonicalize this semantic alias
+        # *only* in the synthetic fixture (never in real project history).
+        # +00:00 is five bytes longer than Z, explaining the 160-byte
+        # difference observed on Colab, without changing commit object IDs.
+        for commit in data["commits"]:
+            if commit["date"].endswith("+00:00"):
+                commit["date"] = commit["date"][:-6] + "Z"
         if data["history_window"] != len(scenes) or data["files_final"] < 200:
             raise AssertionError(f"Unexpected demo data: {data['history_window']}, {data['files_final']}")
         target.parent.mkdir(parents=True,exist_ok=True)

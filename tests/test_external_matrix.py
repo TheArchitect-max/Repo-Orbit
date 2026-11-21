@@ -101,7 +101,7 @@ class AcceptanceGateTests(unittest.TestCase):
         rec={'os':'Linux','status':'PASS','browser':'Chromium','browser_version':'144',
              'expected_asset_hashes':expected,'asset_hashes_match':{'demo.html':True},
              'test_results':[{'name':f,'status':'PASS','returncode':0} for f in
-              ('tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py')]}
+              ('tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py','tests/browser_security_limits.py')]}
         result=audit_browser([rec],expected,CONFIG['required_platforms'])
         self.assertEqual(result['status'],'HOLD')
         self.assertEqual(result['missing_platforms'],['Darwin','Windows'])
@@ -112,7 +112,7 @@ class AcceptanceGateTests(unittest.TestCase):
             return {'os':system,'status':'PASS','browser':'Chromium','browser_version':'144',
                     'expected_asset_hashes':expected,'asset_hashes_match':{'demo.html':True},
                     'test_results':[{'name':f,'status':'PASS','returncode':0} for f in
-                     ('tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py')]}
+                     ('tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py','tests/browser_security_limits.py')]}
         result=audit_browser([rec(p) for p in CONFIG['required_platforms']],expected,CONFIG['required_platforms'])
         self.assertEqual(result['status'],'PASS_WITHIN_PREDECLARED_SCOPE')
         bad=rec('Linux'); bad['asset_hashes_match']={'demo.html':False}

@@ -11,3 +11,20 @@ This product is an **offline Git metadata viewer**, not a safe arbitrary-code an
 - To report suspected vulnerabilities, prefer a private communication channel established by the project owner before any public issue. No official public security contact or service-level promise has been designated yet.
 
 Public release remains on HOLD pending approval and security/privacy acceptance.
+
+## R9 follow-up: bounded standalone gzip payloads (current candidate)
+
+A gzip-compressed standalone HTML report may be much smaller than its
+uncompressed JSON. The browser used to decode the entire expansion before
+parsing. The new viewer now counts decompressed bytes while streaming; it
+rejects inputs above **64 MiB** and decodes UTF-8 with a strict `TextDecoder`.
+The offline evidence parser also reads no more than 64 MiB + 1 byte before
+rejecting an oversized gzip stream. This is resource hardening, **not a
+sandbox**; a large but accepted report can still consume substantial browser
+memory, and a malicious, independently edited HTML file can contain arbitrary
+script beyond the scope of this utility.
+
+A required synthetic Chromium adversarial suite checks the normal small demo,
+a valid gzip expansion over the limit and malformed UTF-8. The complete native
+OS matrix must be repeated for the current source SHA. The independent
+security/privacy review and explicit public release decision remain HOLD.

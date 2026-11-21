@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.browser_payload_integrity import inspect_fixture
-TESTS=['tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py']
+TESTS=['tests/browser_smoke.py','tests/browser_v7.py','tests/browser_combined_limits.py','tests/browser_security_limits.py']
 
 
 def run(out: Path) -> dict:

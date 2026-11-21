@@ -30,3 +30,13 @@ Potential channels after explicit approval: an isolated GitHub repository, targe
 ## v0.7.0 release-readiness update
 
 The local v0.7 candidate now supports bare mirrors and linked worktrees, enforces Git stdout byte limits while Git runs, provides a bounded keyboard-accessible file search, and emits XML 1.0-safe SVG labels. This does **not** constitute a broad accessibility certification or independent security review. Baseline/upgrade canonical JSON matched in a same-fixture test. The separately requested open-source license decision, full cross-platform acceptance and external value validation are still HOLD. No GitHub publication occurred.
+
+## R9 current security acceptance boundary
+
+Six native CI jobs were independently accepted at exact SHA `158a97cf1d6f`.
+A later browser gzip memory-cap patch is a new engineering candidate, not a
+transferable PASS. Before even considering a merge, rerun the native six-job
+matrix and the updated 64 MiB gzip adversarial browser gate on one commit.
+A passing automated memory-bound test alone does not fulfill the independent
+security/privacy, screen-reader accessibility, third-party licence review or
+explicit owner MIT/publication decisions. Those remain HOLD.

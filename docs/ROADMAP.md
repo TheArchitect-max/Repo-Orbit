@@ -24,3 +24,15 @@ R7 and R8 are interim engineering acceptance, not the product endpoint. R9 repla
 The R9 native Chromium acceptance on source `689bdc64a42678464860c65eb44682880aeaf78a` is immutable historical evidence. Following that acceptance, a separate hardening patch removes unbounded Git stderr temp-file spooling from the active replay engine. It concurrently drains stderr with stdout, retains only the first 280 error-diagnostic bytes, enforces an absolute 1 MiB stderr budget, terminates an excessive producer, and preserves existing stdout-size/time-out boundaries and `allow_failure` semantics. Its purpose is to close a documented local disk-exhaustion risk, not improve end-to-end rendering speed.
 
 Offline adversarial subprocess tests and Python regression results are candidate evidence only. The changed core source SHA invalidates transfer of prior native acceptance; all affected preflight/native CLI and browser matrix gates must be rerun on the new same-SHA candidate, and the security, independent accessibility and third-party licensing/release gates remain HOLD. No merge or distribution is authorized.
+
+## R9 follow-up — bounded browser data decompression (current candidate)
+
+Following six-job exact-SHA native acceptance on `158a97cf1d6f`, address the
+remaining identified compressed-payload memory-exhaustion exposure in the
+standalone offline HTML and Python evidence inspection. Maintain the existing
+8k/80k/900k canonical Git payload and immutable baselines. Require (1) bounded
+64 MiB gzip streaming before JSON parsing, (2) strict UTF-8, (3) a real Chromium
+oversize-gzip adversarial gate on every OS, (4) original PNG/DOM parity and the
+existing performance protocol, and (5) independent same-SHA evidence ZIP
+integrity. No incremental capacity or end-to-end speedup is claimed. Security,
+accessibility, licences and owner publication are independent HOLD gates.

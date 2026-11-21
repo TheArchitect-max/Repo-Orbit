@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import gzip
+import io
 import hashlib
 import json
 import re
@@ -15,6 +16,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCE = ROOT / 'validation' / 'BROWSER_CANONICAL_PAYLOAD.json'
+# Test-only limit: canonical 8k/80k/900k JSON is about 39 MiB; a 64 MiB
+# ceiling prevents a tiny malicious gzip payload from inflating without bound.
+MAX_UNCOMPRESSED_DATASET_BYTES = 64 * 1024 * 1024
 SCRIPT = re.compile(
     rb'<script\b(?=[^>]*\bid="dataset")(?=[^>]*\bdata-encoding="gzip-base64")[^>]*>([^<]*)</script>',
     re.DOTALL,
@@ -30,9 +34,17 @@ def inspect_combined_export(html: bytes, reference: dict) -> dict:
         raise ValueError('Expected exactly one gzip-base64 dataset script')
     try:
         zipped = base64.b64decode(matched[0].group(1).strip(), validate=True)
-        raw = gzip.decompress(zipped)
+        # gzip.decompress() allocates the entire expansion, even if its
+        # compressed input fits the HTML size cap. Bound the expansion *while*
+        # decoding. GzipFile supports concatenated gzip members, as before.
+        with gzip.GzipFile(fileobj=io.BytesIO(zipped), mode='rb') as gz:
+            raw = gz.read(MAX_UNCOMPRESSED_DATASET_BYTES + 1)
+        if len(raw) > MAX_UNCOMPRESSED_DATASET_BYTES:
+            raise ValueError('Decompressed browser dataset exceeds 64 MiB safety limit')
         payload = json.loads(raw.decode('utf-8', 'strict'))
-    except (ValueError, UnicodeError, OSError) as exc:
+        if not isinstance(payload, dict):
+            raise ValueError('Browser dataset must be a JSON object')
+    except (ValueError, UnicodeError, OSError, EOFError) as exc:
         raise ValueError('Invalid compressed browser dataset: '+str(exc)) from exc
     digest = hashlib.sha256(raw).hexdigest()
     if digest != reference['uncompressed_dataset_sha256']:
@@ -40,9 +52,11 @@ def inspect_combined_export(html: bytes, reference: dict) -> dict:
     for key, expected in reference['required_dataset_fields'].items():
         if payload.get(key) != expected:
             raise ValueError('Browser dataset field mismatch: ' + key)
-    if len(payload.get('commits', [])) != reference['required_dataset_fields']['history_window']:
+    commits = payload.get('commits')
+    paths = payload.get('paths')
+    if not isinstance(commits, list) or len(commits) != reference['required_dataset_fields']['history_window']:
         raise ValueError('Browser commit array length mismatch')
-    if len(payload.get('paths', [])) != reference['required_dataset_fields']['paths_total']:
+    if not isinstance(paths, list) or len(paths) != reference['required_dataset_fields']['paths_total']:
         raise ValueError('Browser path dictionary length mismatch')
     return {
         'status': 'PASS', 'sha256_uncompressed_dataset': digest,
