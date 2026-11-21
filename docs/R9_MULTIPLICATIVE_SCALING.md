@@ -59,3 +59,8 @@ new native R9 evidence run; old R9 local numbers remain historical.
 This is **not** an external accessibility or security certification; native
 CircleCI evidence remains HOLD until its three independent same-SHA ZIPs
 pass the cross-platform audit. Do not merge PR #1 before that acceptance.
+
+
+## Subsequent filtered-redraw factorization candidate (native HOLD)
+
+The independently accepted R9 native SHA above remains immutable. A separate source-changing candidate now accelerates filtered redraws from O(all paths) to O(matching paths). It must not inherit the original R9 acceptance; see [R9_FILTER_FACTORIZATION.md](R9_FILTER_FACTORIZATION.md) for local numbers, scope limits, and the requirement to rerun native evidence on the exact updated source.

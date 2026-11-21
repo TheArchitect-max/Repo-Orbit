@@ -32,6 +32,8 @@ const nframes = D.commits.length;
 const fileNames = new Set(D.baseline);
 for (const commit of D.commits) for (const [, path] of commit.changes) fileNames.add(path);
 const files = [...fileNames].sort();
+// One normalized name per path; filtered draws reuse a precomputed membership mask.
+const fileNamesLower = files.map(path => path.toLowerCase());
 const index = new Map(files.map((p, i) => [p, i]));
 const root = p => p.includes('/') ? p.split('/')[0] : '(root)';
 const groups = [...new Set(files.map(root))].sort();
@@ -98,7 +100,21 @@ function spatialIndex(view) {
 const nf = n => Number(n).toLocaleString('en-US');
 const date = d => {if(!d)return 'Date redacted';const x=new Date(d);return Number.isNaN(+x) ? String(d).slice(0,10) : x.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});};
 const titleFrame = i => i < 0 ? 'Baseline' : `Commit ${i+1}`;
-const visible = id => (!query || files[id].toLowerCase().includes(query)) && (!filterGroup || nodeGroups[id] === filterGroup);
+// Select only matching paths once per search/group change. Ordinary redraws,
+// animation, pan and zoom then operate in O(matches) instead of O(all files).
+// The mask preserves O(1) visibility checks for exact pointer hit testing.
+let visibleIDs = null, visibleMask = null;
+function rebuildVisible() {
+  if (!query && !filterGroup) {visibleIDs=null;visibleMask=null;return;}
+  const ids=[], mask=new Uint8Array(files.length);
+  for(let id=0;id<files.length;id++) {
+    if(query && !fileNamesLower[id].includes(query))continue;
+    if(filterGroup && nodeGroups[id]!==filterGroup)continue;
+    ids.push(id);mask[id]=1;
+  }
+  visibleIDs=ids;visibleMask=mask;
+}
+const visible = id => !visibleMask || visibleMask[id]===1;
 const N = () => fileCounts[frame+1];
 const el = (tag, cls, value) => { const node=document.createElement(tag);if(cls)node.className=cls;if(value!==undefined)node.textContent=value;return node; };
 const matchPanel = $('matchpanel'), matchCount = $('matchcount'), matches = $('matches');
@@ -109,8 +125,7 @@ function renderMatches() {
   matchPanel.hidden = !query;
   if (!query) return;
   let count = 0;
-  for (let id=0; id<files.length; id++) {
-    if (!visible(id)) continue;
+  for (const id of visibleIDs || []) {
     count++;
     if (count > 24) continue;
     const button = el('button', 'match-button', files[id]);
@@ -346,10 +361,11 @@ function draw(t) {
     bins.touched.length=0;
   }
   let filtered=0;
-  for(let i=0;i<files.length;i++){
+  const drawable=visibleIDs, drawableLength=drawable?drawable.length:files.length;
+  for(let row=0;row<drawableLength;row++){
+    const i=drawable?drawable[row]:row;
     const exist=active[i], difference=comparison&&comparison.get(i);
     if(!exist && difference!=='D')continue;
-    if((query || filterGroup) && !visible(i))continue;
     const src=coords[i][mode];
     const x=cx+(src.x-cx)*zoom+panX, y=cy+(src.y-cy)*zoom+panY;
     if(x<-15||x>width+15||y<-15||y>height+15)continue;
@@ -511,8 +527,10 @@ function svgExport(exact=false){
     }
     parts.push(`<desc>Aggregated density overview; ${included} visible nodes represented by ${bins.size} cells. Zoom or select SVG exact to retain per-file elements. Cell counts do not disclose filenames.</desc>`);
   } else {
-    for(let id=0;id<files.length;id++){
-      if(!active[id]||!visible(id))continue;
+    const candidates=visibleIDs, count=candidates?candidates.length:files.length;
+    for(let row=0;row<count;row++){
+      const id=candidates?candidates[row]:row;
+      if(!active[id])continue;
       const p=project(coords[id][mode]);if(p.x<0||p.y<0||p.x>width||p.y>height)continue;
       included++;
       parts.push(`<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${id===selected?4:2}" fill="${categories[fileKinds[id]]}"><title>${xmlText(files[id])}</title></circle>`);
@@ -529,8 +547,8 @@ $('speed').addEventListener('click',()=>{speedIdx=(speedIdx+1)%speeds.length;$('
 $('growth').addEventListener('click',()=>{showGrowth=!showGrowth;$('growth').classList.toggle('active',showGrowth);$('growth').setAttribute('aria-pressed',String(showGrowth));drawActivity();});
 scrub.addEventListener('input',()=>{pause();jump(Number(scrub.value)-1);});
 $('viewmode').addEventListener('click',()=>{mode=mode==='orbit'?'atlas':'orbit';$('viewmode').textContent=mode==='orbit'?'◈ Atlas view':'◎ Constellation view';$('viewlabel').textContent=mode==='orbit'?'◉ CONSTELLATION / FILE UNIVERSE':'▦ ATLAS / FILE UNIVERSE';resetZoom();});
-$('groupfilter').addEventListener('change',e=>{filterGroup=e.target.value;hovered=null;renderMatches();schedule();});
-search.addEventListener('input',e=>{query=e.target.value.toLowerCase().trim();hovered=null;tooltip.style.display='none';renderMatches();schedule();});
+$('groupfilter').addEventListener('change',e=>{filterGroup=e.target.value;rebuildVisible();hovered=null;renderMatches();schedule();});
+search.addEventListener('input',e=>{query=e.target.value.toLowerCase().trim();rebuildVisible();hovered=null;tooltip.style.display='none';renderMatches();schedule();});
 $('pinA').addEventListener('click',pinA);
 $('compare').addEventListener('click',compare);
 $('zoomreset').addEventListener('click',resetZoom);
