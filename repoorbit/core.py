@@ -9,7 +9,7 @@ import fnmatch
 import re
 import subprocess
 import tempfile
-from threading import Event, Timer
+from threading import Event, Thread, Timer
 from collections import Counter
 from contextlib import contextmanager
 from typing import Iterator
@@ -21,6 +21,8 @@ MAX_EVENTS = 900000
 MAX_GIT_OUTPUT_BYTES = 32 * 1024 * 1024
 MAX_HISTORY_OUTPUT_BYTES = 256 * 1024 * 1024
 MAX_GIT_FIELD_BYTES = 65536
+MAX_GIT_STDERR_BYTES = 1 * 1024 * 1024
+MAX_GIT_ERROR_DETAIL_BYTES = 280
 OID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
 
 
@@ -44,13 +46,44 @@ def _git_output(root: Path, *args: str, timeout: int = 45,
     command = ["git", "--no-optional-locks", "-C", str(root),
                "-c", "core.fsmonitor=false", *args]
     try:
-        with tempfile.TemporaryFile(mode="w+b") as output, tempfile.TemporaryFile(mode="w+b") as errors:
-            with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=errors) as process:
+        with tempfile.TemporaryFile(mode="w+b") as output:
+            with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
                 expired = Event()
+                stderr_exceeded = Event()
+                stderr_failure: list[str] = []
+                stderr_sample = bytearray()
+
+                def drain_stderr() -> None:
+                    """Drain a second pipe concurrently; never spool unlimited stderr."""
+                    total = 0
+                    try:
+                        assert process.stderr is not None
+                        while True:
+                            chunk = process.stderr.read(65536)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if len(stderr_sample) < MAX_GIT_ERROR_DETAIL_BYTES:
+                                remaining = MAX_GIT_ERROR_DETAIL_BYTES - len(stderr_sample)
+                                stderr_sample.extend(chunk[:remaining])
+                            if total > MAX_GIT_STDERR_BYTES:
+                                stderr_exceeded.set()
+                                if process.poll() is None:
+                                    process.kill()
+                                break
+                    except (OSError, ValueError) as exc:
+                        stderr_failure.append(type(exc).__name__)
+                        if process.poll() is None:
+                            process.kill()
+
+                worker = Thread(target=drain_stderr, name="repoorbit-git-stderr", daemon=True)
+                worker.start()
+
                 def terminate_on_timeout() -> None:
                     if process.poll() is None:
                         expired.set()
                         process.kill()
+
                 timer = Timer(timeout, terminate_on_timeout)
                 timer.daemon = True
                 timer.start()
@@ -71,14 +104,21 @@ def _git_output(root: Path, *args: str, timeout: int = 45,
                             )
                         output.write(chunk)
                     process.wait()
+                    worker.join()
+                    if stderr_exceeded.is_set():
+                        raise OrbitError(
+                            f"Git standard error exceeds {MAX_GIT_STDERR_BYTES} bytes; "
+                            "command terminated before unbounded disk growth."
+                        )
+                    if stderr_failure:
+                        raise OrbitError("Unable to drain Git standard error: " + stderr_failure[0])
                     if expired.is_set():
                         raise OrbitError(f"Git operation timed out: {' '.join(args[:2])}")
                     if process.returncode:
                         if allow_failure:
                             yield None
                             return
-                        errors.seek(0)
-                        detail = errors.read(280).decode("utf-8", "replace").strip()
+                        detail = bytes(stderr_sample).decode("utf-8", "replace").strip()
                         raise OrbitError(f"Git command failed ({process.returncode}): {detail}")
                     output.seek(0)
                     yield output
@@ -87,6 +127,7 @@ def _git_output(root: Path, *args: str, timeout: int = 45,
                     if process.poll() is None:
                         process.kill()
                         process.wait()
+                    worker.join()
     except FileNotFoundError as error:
         raise OrbitError("Git is not installed or is not on PATH.") from error
 

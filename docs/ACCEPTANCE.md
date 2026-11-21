@@ -1,3 +1,11 @@
+# R9 native Chromium accepted on prior source; security follow-up pending (2026-11-21)
+
+**Immutable R9 accepted commit:** `689bdc64a42678464860c65eb44682880aeaf78a`, Git tree `4beaa27685f357155b0e54661bfcb76d056193f1`. All three Linux/Windows/macOS Chromium E2E + filter benchmarks passed the exact-SHA, original-ZIP independent matrix audit within the synthetic fixture and performance scopes declared in the PR #1 evidence comment. This is not general-browser, security, accessibility or release approval.
+
+**Current candidate:** bounded Git stderr hardening. The core engine source changed and its SHA-256 pin was updated; native R7 CLI and R9 browser acceptance **must be rerun** at the new commit (the accepted renderer JS remains unchanged). Local Python regression and 8k/80k/900k maximum Git fixture tests do not substitute for the three operating systems. Separate security/privacy, assistive-technology accessibility, licensing/IP and explicit owner MIT authorization gates remain **HOLD**. PR #1 must remain draft and `main` unchanged.
+
+---
+
 # Current R7/R8 acceptance status (2026-11-20)
 
 R7 native CLI: **PASS_WITHIN_PREDECLARED_SCOPE**, independently audited

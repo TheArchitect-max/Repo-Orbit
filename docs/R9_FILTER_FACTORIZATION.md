@@ -43,3 +43,9 @@ Every R9 native ZIP must include \`R9_FILTER_PAIRED_DRAW.json\`, the 12 \`FILTER
 Local integrated candidate validation on Linux/Chromium 144: **136/136 Python regression tests PASS**, new browser benchmark exit 0 with six-case parity and 12 actual PNG files, at least 9× median redraw speedup in each measured case. This is **not native CI evidence**. A previous R9 three-host PASS on \`3a5fe9a...\` does not transfer to this changed commit or any future new head SHA.
 
 **Acceptance state:** local PASS; **Linux/Windows/macOS native browser/performance matrix HOLD** pending three original same-SHA ZIPs and their independent audit. PR #1 remains DRAFT; release gates for security, independent accessibility, third-party licenses and owner publication decision remain HOLD. No merge or release while those required controls are incomplete.
+
+## Immutable three-OS native acceptance and subsequent security candidate (2026-11-21)
+
+The 21 × 256-draw R9 filter-factorization candidate was **independently accepted** on exactly `689bdc64a42678464860c65eb44682880aeaf78a` using original Linux, Windows and macOS CircleCI ZIPs and their full offline matrix audit. The 18 cross-platform filter scenarios met the ≥3× median threshold, with exact PNG and DOM parity. This historical browser acceptance cannot be relabeled or transferred to any later commit.
+
+The subsequent Git stderr hardening changes `repoorbit/core.py` without changing either the native-accepted baseline renderer or the candidate `repoorbit/viewer.js`. Therefore **current HEAD remains HOLD** for cross-platform native CLI, browser, independent security and accessibility, third-party licensing and explicit owner release authorization. Rerun all required native gates at the new source SHA, preserve the historic ZIPs unchanged and report independent audit results rather than treating this documentation entry as a PASS.
