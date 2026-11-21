@@ -23,6 +23,9 @@ OLD = ROOT/'baselines/r9-native-accepted/repoorbit/viewer.js'
 NEW = ROOT/'repoorbit/viewer.js'
 OLD_SHA = '3a31ebb30438a198dd4b3e117822ed0d77a9cc3756b03977bfe094c93554f9fc'
 PAIRS = 21
+# 32 Canvas callbacks can finish within one coarse performance.now() clock tick
+# on macOS. Use 256 real callbacks per batch, never substitute synthetic time.
+DRAW_BATCH = 256
 FILTERS = {'exact': 'file_01234.py', 'selective': 'file_012', 'cluster': 'src/cluster_00'}
 
 
@@ -45,7 +48,7 @@ def bench(out: Path, pairs: int=PAIRS):
             'candidate_sha256':hashlib.sha256(NEW.read_bytes()).hexdigest(),
             'browser':'Chromium','cases':{},'page_errors':[],'network_requests':[],
             'scope':'Synthetic 8k commits, 80k files, 900k events; Canvas draw only',
-            'batch_draws':32,'filter_set':FILTERS, 'behavioral_parity':[],
+            'batch_draws':DRAW_BATCH,'filter_set':FILTERS, 'behavioral_parity':[],
             'acceptance':'HOLD'}
     with sync_playwright() as pw:
         browser=pw.chromium.launch(headless=True,executable_path='/usr/bin/chromium' if Path('/usr/bin/chromium').exists() else None,
@@ -86,7 +89,7 @@ def bench(out: Path, pairs: int=PAIRS):
                 labels=('r9_native','candidate') if filter_key!='selective' else ('candidate','r9_native')
                 for label in labels:
                     p=pages[label]
-                    raw=p.evaluate("(pairs)=>{\n                      const input=document.querySelector('#scrub'), draw=window.__r9drawFn;\n                      if(typeof draw!=='function')throw new Error('instrumented draw not captured');\n                      const records=[];\n                      for(let i=0;i<pairs;i++){\n                        input.value=(i%2===0?'7999':'8000');\n                        input.dispatchEvent(new Event('input',{bubbles:true}));\n                        const t=performance.now(); for(let repeat=0;repeat<32;repeat++)draw(0);\n                        records.push((performance.now()-t)/32);\n                      }\n                      return records;\n                    }",pairs)
+                    raw=p.evaluate("(config)=>{\n                      const {pairs,batch}=config;\n                      const input=document.querySelector('#scrub'), draw=window.__r9drawFn;\n                      if(typeof draw!=='function')throw new Error('instrumented draw not captured');\n                      const records=[];\n                      for(let i=0;i<pairs;i++){\n                        input.value=(i%2===0?'7999':'8000');\n                        input.dispatchEvent(new Event('input',{bubbles:true}));\n                        const t=performance.now(); for(let repeat=0;repeat<batch;repeat++)draw(0);\n                        records.push((performance.now()-t)/batch);\n                      }\n                      return records;\n                    }",{"pairs":pairs,"batch":DRAW_BATCH})
                     samples[label]=raw
                 for label,p in pages.items():
                     p.evaluate('window.__r9on=false')
@@ -168,7 +171,7 @@ def validate_filter_benchmark(report: dict, candidate_sha: str, read_png) -> lis
         problems.append('source_sha_mismatch')
     if report.get('page_errors') or report.get('network_requests'):
         problems.append('browser_error_or_external_network')
-    if report.get('batch_draws') != 32 or report.get('filter_set')!=FILTERS:
+    if report.get('batch_draws') != DRAW_BATCH or report.get('filter_set')!=FILTERS:
         problems.append('benchmark_parameters_modified')
     behavior=report.get('behavioral_parity',[])
     if [x.get('state') for x in behavior]!=['clear','zero_results','map_only','combined_filter']:
@@ -236,4 +239,7 @@ if __name__=='__main__':
     print('Browser:',res['chromium_version'],'acceptance:',res['acceptance'],'errors:',res['page_errors'])
     for name,c in res['cases'].items():
         print(name,round(c['speedup_x'],2),'x; baseline/candidate:',round(c['median_ms']['r9_native'],3),round(c['median_ms']['candidate'],3),'ms; parity',c['parity'], 'query event ms',round(c['query_change_ms']['r9_native'],2),round(c['query_change_ms']['candidate'],2))
+    print('Behavioral parity:', [(s['state'],s['status']) for s in res['behavioral_parity']])
+    print('Keyboard inspection:',json.dumps(res.get('keyboard_inspection',{}),sort_keys=True))
+    print('Independent validation errors:',json.dumps(res.get('independent_validation_errors',[]),sort_keys=True))
     raise SystemExit(0 if res['acceptance']=='PASS_WITHIN_SCOPE' else 2)

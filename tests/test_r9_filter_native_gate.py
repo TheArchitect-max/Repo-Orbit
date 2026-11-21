@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from scripts import audit_browser_zips, run_browser_evidence
-from scripts.benchmark_r9_filter_candidates import FILTERS, OLD_SHA, validate_filter_benchmark
+from scripts.benchmark_r9_filter_candidates import DRAW_BATCH, FILTERS, OLD_SHA, validate_filter_benchmark
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -33,7 +33,7 @@ def sample():
              'dom':{'r9_native':{'matches':'100'},'candidate':{'matches':'100'}}}
             for name in ('clear','zero_results','map_only','combined_filter')]
     r={'protocol':'R9_FILTER_V1_PAIRED_DRAW','pairs':21,'baseline_sha256':OLD_SHA,
-       'candidate_sha256':'c'*64,'batch_draws':32,'filter_set':FILTERS,
+       'candidate_sha256':'c'*64,'batch_draws':DRAW_BATCH,'filter_set':FILTERS,
        'page_errors':[],'network_requests':[],'behavioral_parity':states,
        'keyboard_inspection':{'r9_native':'file_01234.py','candidate':'file_01234.py'},
        'cases':cases,'acceptance':'PASS_WITHIN_SCOPE'}
@@ -67,8 +67,14 @@ class R9NativeFilterGateTests(unittest.TestCase):
         r,png=sample();r['behavioral_parity'].pop()
         self.assertIn('missing_behavioral_states',validate_filter_benchmark(r,'c'*64,lambda _:png))
     def test_changed_measurement_batch_rejected(self):
-        r,png=sample();r['batch_draws']=1
+        r,png=sample();r['batch_draws']=32
         self.assertIn('benchmark_parameters_modified',validate_filter_benchmark(r,'c'*64,lambda _:png))
+    def test_high_resolution_batches_are_real_and_strictly_enforced(self):
+        self.assertEqual(DRAW_BATCH,256)
+        r,png=sample()
+        rec=r['cases']['atlas/exact']
+        rec['raw_ms']['candidate']=[0.0]*21
+        self.assertIn('atlas/exact:invalid_raw_candidate',validate_filter_benchmark(r,'c'*64,lambda _:png))
     def test_browser_configuration_remains_opt_in(self):
         text=(ROOT/'.circleci/config.yml').read_text()
         self.assertEqual(text.count('default: false'),6)

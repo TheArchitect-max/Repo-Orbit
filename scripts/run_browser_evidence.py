@@ -253,6 +253,8 @@ def package(staging: Path, out: Path, system: str) -> int:
             raise RuntimeError('R9 browser ZIP integrity failed')
     print('R9_BROWSER_ZIP:', renamed, 'files:', len(manifest['files']), flush=True)
     print('R9_BROWSER_PLATFORM_AUDIT:', result['status'], flush=True)
+    if result['status'] != 'PASS_WITHIN_PREDECLARED_SCOPE':
+        print('R9_BROWSER_PLATFORM_ERRORS:', json.dumps(result.get('errors', []), sort_keys=True), flush=True)
     return 0 if result['status'] == 'PASS_WITHIN_PREDECLARED_SCOPE' else 2
 
 
