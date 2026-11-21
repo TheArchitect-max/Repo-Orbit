@@ -1,0 +1,22 @@
+{
+  "schema": 1,
+  "created_utc_date": "2026-11-20",
+  "purpose": "Validation-only R3: preserve R2, accepted Linux measurements and fix uv shallow history",
+  "original_package_sha256": "b5188837a52f49a448ae09e071d83e6222a3b87d63d597cdaaad5389aa931032",
+  "added_files_sha256": {
+    "external-results/colab-linux/requests_Linux_3c7baaa05ab4.json": "1d46657194bbec64a5765f1a4fc7d43d7fd264ea28213e1f0516dd072ebb305f",
+    "external-results/colab-linux/flask_Linux_49943b5a9441.json": "7aafe2637bde112f58225e15d29f8d148e7a36291ef87a28ab37eeb29b7d3aa1",
+    "external-results/colab-linux/requests_Linux_stdout.log": "32d87806378088fec109c2fc986aff1dde077c7fa1733f5045b9e05f5bd9e95e",
+    "external-results/colab-linux/flask_Linux_stdout.log": "fb80474c82cf17ac4b7de2ccec3b630e302d505bc1fb4af88fe1b2b8d9c2db47",
+    "evidence/r2_submitted/uv_Linux_7bf2d9a3ae44.json": "2b4b16be39ace446d5e7bd660c100813033288ff5f4141f04bbccb173eb2f5c3",
+    "evidence/r2_submitted/uv_Linux_stdout.log": "30d9da895603754d1b139461a0740c5fb00c2585ac61e40cb3216652ca3f12c3",
+    "evidence/r2_submitted/colab_audit.json": "9120fd337cb3b67d017f482b0fbb86adc8393f7e17a6b13916f75869085566f6",
+    "evidence/r2_submitted/colab_audit.md": "9f52408c8341c966c0c20ad2bd75d66e0635b5c350cae4104c8ca86a6f1242ec",
+    "evidence/r2_submitted/RUN_STATUS.json": "a388bcad0ed2300baeeeafeadc0c0cd1f8035461124d8ebcbe0916c2dead6742",
+    "evidence/r2_submitted/HOST.json": "4b2f66e7a2df1fc7debd9f37ba65b17fdb9d9c00b5590dd134fd2574ec4b8631",
+    "scripts/prepare_uv_full_history.py": "00aae9086e43733e98e432b94e86332e61a2e914fe2d582cbda860d974a17d6b",
+    "validation/test_uv_full_history.py": "b48a94ac9730e8e8e50ee5a3cff71f1cb9c8a7c2eb2cc96a8ff5dff9f47949fc",
+    "validation/R3_UV_REMEDIATION_README.md": "c2421d5ffab3eeaca28de2555e3bb0c558b2352d6f9fe181dee01d13e31e36a2",
+    "validation/REPO_ORBIT_COLAB_CPU_R3_UV_FIX.ipynb": "77a365b4d0e9e9137b2be5bb3fc449b1e097399b0c36e53dbffbe0da8d8a925f"
+  }
+}
