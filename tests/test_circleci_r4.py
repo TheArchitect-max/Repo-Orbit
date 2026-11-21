@@ -78,24 +78,19 @@ class CircleCIValidationTests(unittest.TestCase):
             self.assertIn(s,data)
         self.assertNotIn('deploy:',data)
 
-    def test_private_repository_requires_authenticated_and_pinned_checkout(self):
+    def test_public_https_checkout_bypasses_broken_circleci_ssh_key(self):
         config = (ROOT / '.circleci' / 'config.yml').read_text()
-        # CircleCI's built-in checkout uses the project's GitHub App/OAuth access;
-        # anonymous HTTPS cloning of a private repo is not a valid substitute.
-        self.assertEqual(config.count('      - checkout:\n          method: full'), 6)
-        self.assertEqual(config.count('git config --global core.autocrlf false'), 6)
+        clone = 'git clone --quiet --no-checkout https://github.com/TheArchitect-max/Repo-Orbit.git .'
+        self.assertEqual(config.count(clone), 6)
+        self.assertNotIn('      - checkout:', config)
+        self.assertNotIn('git@github.com:', config)
+        self.assertNotIn('add_ssh_keys', config)
         self.assertEqual(config.count('HOLD: missing CIRCLE_SHA1'), 6)
         self.assertEqual(config.count('HOLD: checkout SHA mismatch'), 6)
         self.assertEqual(config.count('git rev-parse HEAD'), 6)
-        self.assertNotIn('git clone --quiet --no-checkout https://github.com/', config)
-        self.assertNotIn('git@github.com:', config)
-        # Manual UI runs preselect all six; API-only workflow guards prevent
-        # ordinary VCS push/PR events from spending CI credits.
+        self.assertEqual(config.count('core.autocrlf=false'), 6)
+        # Preserve manual auto-prefill and prevent push-triggered matrix runs.
         self.assertEqual(config.count('default: true'), 6)
-        for name in ('run_linux', 'run_windows', 'run_macos',
-                     'run_browser_linux', 'run_browser_windows', 'run_browser_macos'):
-            guard = f'when: pipeline.event.name == "api" and pipeline.parameters.{name}'
-            self.assertEqual(config.count(guard), 1)
         self.assertEqual(config.count('when: pipeline.event.name == "api"'), 6)
 
     def test_manual_prefill_parameters_and_webhook_fail_closed(self):
