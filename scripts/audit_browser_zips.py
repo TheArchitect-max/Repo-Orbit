@@ -141,6 +141,8 @@ def inspect_zip(path: Path) -> tuple[dict,dict]:
             raise ValueError('v7 browser assertions did not pass')
         if combined.get('status') != 'PASS' or combined.get('uncaught_javascript_errors') or combined.get('console_errors') or not combined.get('no_external_http_requests'):
             raise ValueError('Combined-limit browser assertions did not pass')
+        if combined.get('r9_r6_compact_history_exact') != canonical.get('r9_r6_compact_history_exact'):
+            raise ValueError('R9 R6 compact Git event index does not match independent canonical oracle')
         if (security.get('status') != 'PASS' or
             security.get('expected_guard_bytes') != 64*1024*1024 or
             security.get('oversize_expanded_bytes') != 64*1024*1024 + 1 or

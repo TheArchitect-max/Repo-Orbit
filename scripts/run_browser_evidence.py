@@ -200,6 +200,8 @@ def evaluate_platform(staging: Path, system: str) -> dict:
             errors.append({'type': 'v7_browser_assertions_not_pass'})
         if maximum.get('status') != 'PASS' or maximum.get('uncaught_javascript_errors') or maximum.get('console_errors') or not maximum.get('no_external_http_requests'):
             errors.append({'type': 'maximum_browser_assertions_not_pass'})
+        if maximum.get('r9_r6_compact_history_exact') != canonical.get('r9_r6_compact_history_exact'):
+            errors.append({'type': 'r9_r6_compact_history_not_exact'})
         if (security.get('status') != 'PASS' or security.get('cases') != {
             'normal_synthetic_demo':'PASS',
             'gzip_expansion_exceeds_64_mib':'PASS',

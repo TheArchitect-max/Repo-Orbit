@@ -1,7 +1,11 @@
 """Headless Chromium smoke at all REPO ORBIT v0.6.0 caps simultaneously."""
 from __future__ import annotations
+import base64
+import gzip
 import hashlib
+import io
 import json
+import re
 import os
 import platform
 import sys
@@ -42,8 +46,38 @@ def main() -> None:
         page.locator('#compare').click()
         compare=get('diffsummary')
         assert 'changed between frames' in compare,compare
+        # R9 R6: the compact columnar event index must preserve the complete
+        # exact 900k-event per-file history and latest eight event identities.
+        # Compute the oracle independently from the original bounded JSON
+        # payload, never from the viewer's reconstructed index.
+        packed_match=re.search(
+            r'<script type="application/json" data-encoding="([^"]+)" id="dataset">(.*?)</script>',
+            content, re.DOTALL)
+        assert packed_match and packed_match.group(1)=='gzip-base64'
+        with gzip.GzipFile(fileobj=io.BytesIO(base64.b64decode(packed_match.group(2)))) as stream:
+            original=stream.read(64*1024*1024+1)
+        assert len(original)<=64*1024*1024
+        packed=json.loads(original)
+        assert packed['packed']=='path-index-v1'
+        hot_id,hot_count=packed['top_paths'][0]
+        expected_path=packed['paths'][hot_id]
+        history=[]
+        for i,commit in enumerate(packed['commits']):
+            for code,path_id,_version in commit['changes']:
+                if path_id==hot_id:history.append((i,code))
+        assert len(history)==hot_count, (len(history),hot_count)
         page.locator('#hotspots .hotspot-button').first.click(timeout=120000)
-        assert get('inspectpath').startswith('src/')
+        assert get('inspectpath')==expected_path
+        assert get('inspectcount')==f'{hot_count:,} events'
+        actual=page.locator('#inspectevents .btn').all_text_contents()
+        assert len(actual)==min(len(history),8)
+        for observed,(index,code) in zip(actual,reversed(history[-8:])):
+            assert observed.startswith(f'{code} · Commit {index+1} · '), (observed,index,code)
+        history_verified={
+            'status':'PASS','source':'independently decompressed canonical packed Git dataset',
+            'path':expected_path,'event_count':hot_count,'last_events_verified':len(actual),
+            'original_events':packed['changes_total'],
+            'last_eight':[{'frame':i+1,'status':code} for i,code in history[-8:]]}
         page.locator('#search').fill('file_00001.py')
         page.wait_for_timeout(500)
         page.locator('#search').fill('')
@@ -68,6 +102,7 @@ def main() -> None:
           'event_count_shown':get('statchanges'),
           'compare_summary':compare,
           'hotspot_and_search':'PASS',
+          'r9_r6_compact_history_exact':history_verified,
           'timeline_jump_1_4000_8000':'PASS',
           'no_external_http_requests':not requests,
           'uncaught_javascript_errors':errors,

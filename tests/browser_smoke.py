@@ -106,6 +106,23 @@ def main():
         page.locator('#scrub').fill('27')
         page.wait_for_timeout(80)
         page.screenshot(path=str(ROOT/'demo'/'RepoOrbit_Preview.png'),full_page=True)
+        # R9 R6: legacy plain, non-dictionary JSON is a supported export.
+        # Verify the compact columnar replay does not assume packed path IDs.
+        sys.path.insert(0,str(ROOT))
+        from scripts.rebuild_maximum_demo import decode_embedded
+        from repoorbit.render import render
+        legacy=render(decode_embedded(DOC),compact=False,compression='plain')
+        plain=browser.new_page(viewport={'width':1440,'height':1000})
+        plain.on('pageerror',lambda e:errors.append('legacy nonpacked: '+str(e)))
+        plain.on('request',lambda r:network.append(r.url) if r.url.startswith(('https://','http://')) else None)
+        plain.set_content(legacy,wait_until='domcontentloaded',timeout=120000)
+        plain.wait_for_function("document.querySelector('#statcommits')?.textContent==='32'",timeout=120000)
+        plain.locator('#scrub').fill('32')
+        assert plain.locator('#statfiles').inner_text()=='258'
+        assert plain.locator('#eventtitle').inner_text()=='Strengthen regression tests · iteration 20'
+        plain.locator('.event-button').first.click()
+        assert 'events' in plain.locator('#inspectcount').inner_text()
+        plain.close()
         assert not errors,errors
         assert not network,network
         browser.close()

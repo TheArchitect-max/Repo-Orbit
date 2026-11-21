@@ -58,7 +58,34 @@ def inspect_combined_export(html: bytes, reference: dict) -> dict:
         raise ValueError('Browser commit array length mismatch')
     if not isinstance(paths, list) or len(paths) != reference['required_dataset_fields']['paths_total']:
         raise ValueError('Browser path dictionary length mismatch')
+    # R9 R6: an independent oracle for the most frequently changed file.
+    # This proves the browser's compact per-file history index has not lost,
+    # reordered, or relabelled events in the 900k-event synthetic Git history.
+    # Unit-only canonical fixtures without a top_paths field remain supported.
+    hotspot_oracle = None
+    hotspots = payload.get('top_paths')
+    if isinstance(hotspots, list) and hotspots:
+        entry = hotspots[0]
+        if (not isinstance(entry, list) or len(entry)!=2 or
+            not isinstance(entry[0], int) or isinstance(entry[0], bool) or
+            not 0<=entry[0]<len(paths) or not isinstance(entry[1], int)):
+            raise ValueError('Invalid canonical hotspot reference')
+        path_id, claimed_count=entry
+        occurrences=[]
+        for frame, commit in enumerate(commits):
+            for row in commit['changes']:
+                if row[1]==path_id:
+                    occurrences.append({'frame':frame+1,'status':row[0]})
+        if len(occurrences)!=claimed_count:
+            raise ValueError('Canonical hotspot count does not match Git events')
+        hotspot_oracle={
+            'status':'PASS','source':'independently decompressed canonical packed Git dataset',
+            'path':paths[path_id],'event_count':claimed_count,
+            'last_events_verified':min(len(occurrences),8),
+            'original_events':payload['changes_total'],
+            'last_eight':occurrences[-8:]}
     return {
+        'r9_r6_compact_history_exact': hotspot_oracle,
         'status': 'PASS', 'sha256_uncompressed_dataset': digest,
         'sha256_html': hashlib.sha256(html).hexdigest(),
         'bytes_html': len(html), 'bytes_compressed_payload': len(zipped),

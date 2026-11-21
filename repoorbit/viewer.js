@@ -29,14 +29,16 @@ if(dataset.dataset.encoding==='gzip-base64'){
 }else{
   D=JSON.parse(dataset.textContent);
 }
+// Keep packed status/path-ID/version tuples in their original form. The old
+// eager unpacking allocated 900k replacement [status,path] arrays, 900k
+// version entries and 8k per-commit copies, even though only one commit's
+// first hundred events are visible at a time. Plain external JSON remains
+// supported without any format change.
+let packedPaths = null;
 if (D.packed === 'path-index-v1') {
-  const paths = D.paths;
-  D.baseline = D.baseline.map(id => paths[id]);
-  D.top_paths = D.top_paths.map(([id, n]) => [paths[id], n]);
-  for (const c of D.commits) {
-    c.versions = c.changes.map(row => row[2]);
-    c.changes = c.changes.map(([code, id]) => [code, paths[id]]);
-  }
+  packedPaths = D.paths;
+  D.baseline = D.baseline.map(id => packedPaths[id]);
+  D.top_paths = D.top_paths.map(([id, n]) => [packedPaths[id], n]);
   delete D.paths;
   delete D.packed;
 } else if (D.packed !== undefined) {
@@ -50,9 +52,11 @@ const orbit = $('orbit'), ctx = orbit.getContext('2d');
 const activity = $('activity'), act = activity.getContext('2d');
 const scrub = $('scrub'), search = $('search'), tooltip = $('hover');
 const nframes = D.commits.length;
-const fileNames = new Set(D.baseline);
-for (const commit of D.commits) for (const [, path] of commit.changes) fileNames.add(path);
-const files = [...fileNames].sort();
+const files = packedPaths || (() => {
+  const fileNames = new Set(D.baseline);
+  for (const commit of D.commits) for (const [,path] of commit.changes) fileNames.add(path);
+  return [...fileNames].sort();
+})();
 // One normalized name per path; filtered draws reuse a precomputed membership mask.
 const fileNamesLower = files.map(path => path.toLowerCase());
 const index = new Map(files.map((p, i) => [p, i]));
@@ -67,13 +71,63 @@ const kind = p => codeRE.test(p) ? 'code' : docsRE.test(p) ? 'docs' : 'asset';
 const fileKinds = files.map(kind);
 const hash = s => { let h=2166136261; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0; };
 const seeds = files.map(hash);
-// Version IDs preserve exact (Git object ID + file mode) equality, not a touch heuristic.
-const changeIndex = D.commits.map(c => c.changes.map(([code, path], i) => [code, index.get(path), c.versions[i]]));
-const histories = new Map();
-changeIndex.forEach((row, frame) => row.forEach(([code, id]) => {
-  if (!histories.has(id)) histories.set(id, []);
-  histories.get(id).push({frame, code});
-}));
+// Preserve exact Git object+mode version IDs and change statuses, while
+// compiling transient JSON change tuples into compact columnar arrays.
+// This avoids retaining 900,000 object arrays (and their duplicate versions).
+const historyKindNames = [], statusIDs = new Map();
+const changeIndex = D.commits.map(c => {
+  const source=c.changes;
+  const ids=new Uint32Array(source.length), versions=new Uint32Array(source.length);
+  const kinds=new Uint16Array(source.length);
+  for (let i=0; i<source.length; i++) {
+    const [code,path,version] = source[i];
+    const id=packedPaths ? path : index.get(path);
+    if (!Number.isInteger(id) || id<0 || id>=files.length)
+      throw new Error('Git event path missing from file index');
+    let kindId=statusIDs.get(code);
+    if (kindId===undefined) {
+      kindId=historyKindNames.length;
+      if (kindId>=65536) throw new Error('Too many Git status categories');
+      statusIDs.set(code,kindId); historyKindNames.push(code);
+    }
+    ids[i]=id; versions[i]=packedPaths ? version : c.versions[i]; kinds[i]=kindId;
+  }
+  // Only the number of changed paths is needed for graph history/activity.
+  // The event list is materialized from `changeIndex` for the current frame.
+  c.changes=ids;
+  delete c.versions;
+  return {ids,versions,kinds};
+});
+// Compact, deterministic per-file history index. The prior implementation
+// eagerly created one {frame,code} object for *every* Git change event (900k
+// objects in the maximum fixture), although the inspector shows at most eight.
+// Two linear passes construct a stable CSR index; inspect a file on demand.
+// The Uint32 frame representation avoids wrapping if the commit budget grows.
+const eventCounts = new Uint32Array(files.length);
+for (const row of changeIndex) for (const id of row.ids) eventCounts[id]++;
+const historyOffsets = new Uint32Array(files.length+1);
+for (let id=0; id<files.length; id++) historyOffsets[id+1]=historyOffsets[id]+eventCounts[id];
+const eventFrames = new Uint32Array(historyOffsets[files.length]);
+const eventKinds = new Uint16Array(eventFrames.length);
+const writeOffset = historyOffsets.slice(0,files.length);
+for (let frame=0; frame<changeIndex.length; frame++) {
+  const row=changeIndex[frame];
+  for (let entry=0; entry<row.ids.length; entry++) {
+    const id=row.ids[entry], pos=writeOffset[id]++;
+    eventFrames[pos]=frame; eventKinds[pos]=row.kinds[entry];
+  }
+}
+// Publicly unexposed internal accessor: keep the existing inspector callers
+// and exact chronological event/status semantics. Unlike the old eager Map,
+// its small object arrays are allocated only for files a user inspects.
+const histories = { get(id) {
+  if (!Number.isInteger(id) || id<0 || id>=files.length) return undefined;
+  const start=historyOffsets[id], end=historyOffsets[id+1];
+  if (end===start) return undefined;
+  const result=new Array(end-start);
+  for (let i=start; i<end; i++) result[i-start]={frame:eventFrames[i],code:historyKindNames[eventKinds[i]]};
+  return result;
+}};
 const initial = new Uint32Array(files.length);
 D.baseline.forEach((path, i) => { initial[index.get(path)] = D.baseline_versions[i]; });
 // Bound browser checkpoint memory to about 64 snapshots at large history sizes.
@@ -85,7 +139,8 @@ let snapshot = initial.slice();
 const fileCounts = [initial.reduce((n, version) => n + (version !== 0 ? 1 : 0), 0)];
 changeIndex.forEach((row, i) => {
   let count = fileCounts[i];
-  for (const [code, id, version] of row) {
+  for (let entry=0; entry<row.ids.length; entry++) {
+    const id=row.ids[entry], version=row.versions[entry];
     if (!snapshot[id] && version) count++;
     else if (snapshot[id] && !version) count--;
     snapshot[id] = version;
@@ -193,15 +248,23 @@ function jump(next) {
   const to=Math.max(-1,Math.min(nframes-1,next));
   if(to === frame) return;
   if(to === frame+1) {
-    for(const [,id,version] of changeIndex[to]) active[id]=version;
+    const row=changeIndex[to];
+    for(let i=0;i<row.ids.length;i++) active[row.ids[i]]=row.versions[i];
   } else {
     const base=Math.floor((to+1)/checkpointStride)*checkpointStride-1;
     const checkpoint=Math.max(-1,Math.min(to,base));
     active=(checkpoints.get(checkpoint) || initial).slice();
-    for(let i=checkpoint+1;i<=to;i++) for(const [,id,version] of changeIndex[i]) active[id]=version;
+    for(let i=checkpoint+1;i<=to;i++) {
+      const row=changeIndex[i];
+      for(let j=0;j<row.ids.length;j++) active[row.ids[j]]=row.versions[j];
+    }
   }
   frame=to;
-  hot=new Map(to>=0?changeIndex[to].map(([code,id])=>[id,code]):[]);
+  hot=new Map();
+  if(to>=0) {
+    const row=changeIndex[to];
+    for(let i=0;i<row.ids.length;i++) hot.set(row.ids[i],historyKindNames[row.kinds[i]]);
+  }
   pulse=.8;
   comparison=null;
   $('compare').classList.remove('active');
@@ -221,7 +284,9 @@ function update() {
   const list=$('events');list.replaceChildren();
   if(!c || !c.changes.length) list.append(el('p','empty',c?'No file changes in this commit.':`${nf(D.baseline.length)} existing files before this history window.`));
   else {
-    for(const [status,path] of c.changes.slice(0,100)) {
+    const current=changeIndex[frame];
+    for(let i=0;i<Math.min(100,current.ids.length);i++) {
+      const status=historyKindNames[current.kinds[i]], path=files[current.ids[i]];
       const row=el('div','event '+(status==='D'?'deleted':status==='A'?'added':'modified'));
       const button=el('button','event-button');button.type='button';button.setAttribute('aria-label',`Inspect ${path}`);
       button.append(el('span','letter',status),el('span','event-path',path));
