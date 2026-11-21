@@ -1,3 +1,13 @@
+# Native R9 CLI regression fixture independence — follow-up (2026-11-21)
+
+**Observed 3-platform CLI HOLD (same source `9ba5e7817f3586a03f12d94d5a7cca654891091f`):** Linux, Windows and macOS all passed `source_preflight` but each failed exactly two `test_browser_ci` tests with `FileNotFoundError` for `demo/RepoOrbit_CombinedMaximum.html`. That generated 8k/80k/900k HTML is produced inside the separate browser job and is not Git-tracked. The browser jobs were reported PASS; the submitted CLI logs do not themselves prove those browser results.
+
+**Fix candidate:** the two pure `inspect_combined_export` unit tests now synthesize a tiny, valid gzip-base64 dataset in memory with its own exact canonical hash, and retain exact-payload equality, different-gzip acceptance, and tamper rejection. A separate test pins the real maximum-fixture reference hash and counts. The **full** 8k/80k/900k browser fixture, real-Git provenance, original PNGs, source identities and 3-platform browser matrix remain mandatory in the independent browser jobs; their acceptance gates are not weakened or bypassed. The native CLI suite can now run hermetically from a clean checkout without `demo/`.
+
+**Status:** This changes regression test source, so the prior native/browser evidence cannot be automatically transferred. Execute three native CLI and three browser jobs on the exact new HEAD; require same-SHA ZIP and independent audits before merging. Independent security, accessibility, third-party licensing and owner release authorization remain HOLD.
+
+---
+
 # R9 native Chromium accepted on prior source; security follow-up pending (2026-11-21)
 
 **Immutable R9 accepted commit:** `689bdc64a42678464860c65eb44682880aeaf78a`, Git tree `4beaa27685f357155b0e54661bfcb76d056193f1`. All three Linux/Windows/macOS Chromium E2E + filter benchmarks passed the exact-SHA, original-ZIP independent matrix audit within the synthetic fixture and performance scopes declared in the PR #1 evidence comment. This is not general-browser, security, accessibility or release approval.

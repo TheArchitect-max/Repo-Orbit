@@ -1,8 +1,11 @@
 """R8 native Chromium evidence controls; offline tests, no browser installation."""
 from __future__ import annotations
 
+import base64
+import gzip
 import hashlib
 import json
+import re
 import subprocess
 import tempfile
 import unittest
@@ -10,22 +13,40 @@ from pathlib import Path
 
 from scripts.audit_browser_zips import audit as audit_bundle
 from scripts.run_browser_evidence import evaluate_platform, fixture_provenance
+from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def canonical_unit_fixture() -> tuple[bytes, bytes, dict]:
+    """Exercise gzip and canonical-hash logic without a generated browser artifact.
+
+    The full 8k/80k/900k Git fixture is independently created and verified by
+    browser-native jobs; native CLI regressions must work from a clean checkout.
+    """
+    original_reference = expected_reference()
+    fields = dict(original_reference['required_dataset_fields'])
+    fields.update(history_window=2, paths_total=2, changes_total=3, verified_frames=1)
+    dataset = {**fields, 'commits':[{'changes': []}, {'changes': []}],
+               'paths':['src/a.py', 'src/b.py']}
+    raw = json.dumps(dataset, separators=(',', ':'), sort_keys=True).encode('utf-8')
+    reference = {**original_reference,
+                 'required_dataset_fields': fields,
+                 'uncompressed_dataset_sha256': hashlib.sha256(raw).hexdigest(),
+                 'maximum_html_bytes': 8192}
+    html = (b'<html><script id="dataset" data-encoding="gzip-base64">'
+            + base64.b64encode(gzip.compress(raw, compresslevel=9, mtime=0))
+            + b'</script></html>')
+    return html, raw, reference
+
+
 class R8BrowserGateTests(unittest.TestCase):
     def test_combined_fixture_exact_uncompressed_hash_allows_gzip_variation(self):
-        import base64
-        import gzip
-        import re
-        from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
-        source = (ROOT/'demo/RepoOrbit_CombinedMaximum.html').read_bytes()
-        reference = expected_reference()
+        source, raw, reference = canonical_unit_fixture()
         original = inspect_combined_export(source, reference)
         match = re.search(rb'<script[^>]*id="dataset"[^>]*>([^<]*)</script>', source, re.S)
         self.assertIsNotNone(match)
-        raw = gzip.decompress(base64.b64decode(match.group(1)))
+        self.assertEqual(gzip.decompress(base64.b64decode(match.group(1))), raw)
         alternate = base64.b64encode(gzip.compress(raw, compresslevel=1, mtime=0))
         different_html = source[:match.start(1)] + alternate + source[match.end(1):]
         self.assertNotEqual(hashlib.sha256(source).hexdigest(), hashlib.sha256(different_html).hexdigest())
@@ -34,20 +55,26 @@ class R8BrowserGateTests(unittest.TestCase):
         self.assertEqual(normalized['git_head'], reference['required_dataset_fields']['head'])
 
     def test_combined_fixture_changed_dataset_rejected_even_with_valid_gzip(self):
-        import base64
-        import gzip
-        import re
-        from scripts.browser_payload_integrity import inspect_combined_export, expected_reference
-        original = (ROOT/'demo/RepoOrbit_CombinedMaximum.html').read_bytes()
+        original, raw, reference = canonical_unit_fixture()
         match = re.search(rb'<script[^>]*id="dataset"[^>]*>([^<]*)</script>', original, re.S)
         self.assertIsNotNone(match)
-        raw = gzip.decompress(base64.b64decode(match.group(1)))
-        tampered = raw.replace(b'"head":"0bcade52', b'"head":"9bcade52', 1)
+        head = reference['required_dataset_fields']['head'].encode('ascii')
+        new_head = (b'9' if head[0:1] != b'9' else b'8') + head[1:]
+        tampered = raw.replace(b'"head":"' + head + b'"', b'"head":"' + new_head + b'"', 1)
         self.assertNotEqual(raw, tampered)
         packed = base64.b64encode(gzip.compress(tampered, compresslevel=5, mtime=0))
         html = original[:match.start(1)] + packed + original[match.end(1):]
         with self.assertRaisesRegex(ValueError, 'Canonical browser dataset SHA-256 mismatch'):
-            inspect_combined_export(html, expected_reference())
+            inspect_combined_export(html, reference)
+
+    def test_full_size_canonical_reference_is_still_locked(self):
+        reference = expected_reference()
+        self.assertEqual(reference['uncompressed_dataset_sha256'],
+                         '1de6f6fbe504db5bacdb1e1be1b178404b969f1cd3ef3dacf24d7f310f25bf63')
+        fields = reference['required_dataset_fields']
+        self.assertEqual((fields['history_window'], fields['paths_total'],
+                          fields['changes_total'], fields['verified_frames']),
+                         (8000, 80000, 900000, 3))
 
     def test_browser_matrix_requires_all_three_native_platforms(self):
         self.assertEqual(audit_bundle([])['status'], 'HOLD_OR_FAIL')
